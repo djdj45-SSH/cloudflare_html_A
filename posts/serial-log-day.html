@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>串口日志里的一天 — 余量 MARGIN</title>
+<meta name="description" content="ESP32 上的 micro-ROS 客户端每 40 秒掉线一次。查了三天 Wi-Fi，最后问题出在电源：一次 3.2 秒的串口沉默，指向了 USB 线上的压降。">
+<link rel="canonical" href="https://margin.pages.dev/posts/serial-log-day.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="串口日志里的一天 — 余量 MARGIN">
+<meta property="og:description" content="每 40 秒掉线一次。查了三天 Wi-Fi，最后问题出在电源。">
+<meta property="og:url" content="https://margin.pages.dev/posts/serial-log-day.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">调试笔记 · No.13 · ESP32 / micro-ROS</div>
+      <h1>串口日志里的一天</h1>
+      <p class="standfirst">设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上，才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。</p>
+      <div class="byline">
+        <span><time datetime="2026-09-14">2026.09.14</time></span>
+        <span class="dot"></span><span data-readtime>约 12 分钟</span>
+        <span class="dot"></span><span>2,860 字</span>
+        <span class="dot"></span><span>固件 v2.8 · ESP32-WROOM-32E · micro_ros_arduino 2.0.8-humble</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/esp32.html">ESP32</a>
+        <a class="tag" href="/tags/micro-ros.html">micro-ROS</a>
+        <a class="tag" href="/tags/debug.html">调试</a></div>
+    </header>
+
+        <div class="wrap article-body">
+          <!-- ================= 正文 ================= -->
+          <div class="prose">
+            <p class="first">那天早上九点，我把串口监视器打开，泡了杯咖啡，打算二十分钟内解决一个"小问题"。
+              下午六点，咖啡续了四杯，问题还在，而我开始怀疑自己过去三年学的每一件事。</p>
+
+            <p>现象很干净，干净得反常：ESP32 上的 micro-ROS 客户端每隔大约 40 秒就会和 Agent 断开一次，
+              重连耗时 3 到 4 秒，然后一切恢复正常。不是偶发，不是随机，是<mark>精确的、可重复的、带着节拍的</mark>。
+              这种规律性通常意味着它不是干扰，而是某个计数器溢出了，或者某个定时器到期了。</p>
+
+            <h2><span class="h2num">01</span>先把现象量化</h2>
+
+            <p>我没有立刻改代码。经验告诉我，在没摸清边界条件之前动手，只会把水搅浑。我先花了两个小时做一件事：
+              记录。Agent 侧开着 <code>-v6</code>，ESP32 侧串口波特率提到 921600，两边的时间戳都打上，跑了 30 分钟。</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>agent · ros2 run micro_ros_agent -v6</span></div>
+    <pre><span class="c"># 一次完整的掉线—重连周期，时间戳为本地时钟</span>
+    [09:14:02.311] DEBUG  client 0x3FFB2C40 &lt;--  send message 42 bytes
+    [09:14:02.318] DEBUG  client 0x3FFB2C40 --&gt;  recv ack
+    <span class="c"># 此后 3.2 秒内，Agent 侧没有任何一行输出</span>
+    [09:14:05.520] WARN   client 0x3FFB2C40 : transport timeout, closing session
+    [09:14:05.521] INFO   session closed, 1 clients remaining: 0
+    [09:14:08.744] INFO   new session: client 0x3FFB1F88 (udp 192.168.1.11:8888)
+    [09:14:08.901] DEBUG  client 0x3FFB1F88 &lt;--  send message 42 bytes</pre>
+            </div>
+
+            <p>关键数字有三个：周期约 40 秒，静默 3.2 秒，重连后 <code>client</code> 句柄变了。
+              第三点很重要——句柄变化说明 Agent 认为这是一个<em>新会话</em>，不是原来的连接被续上。
+              也就是说，ESP32 那边主动重启了 transport，或者压根重启了整个任务。</p>
+
+            <blockquote>
+              <p>我第一反应是 Wi-Fi。因为它是这套系统里最不可靠的一环，而且我手上有现成的数据：
+                局域网 ping 常年 100 ms 上下——这个数我一直觉得不对劲，但从来没认真追过。</p>
+            </blockquote>
+
+            <h2><span class="h2num">02</span>第一个假设：Wi-Fi（错的）</h2>
+
+            <p>于是我做了所有 Wi-Fi 问题该做的检查。</p>
+
+            <ul>
+              <li>把 ESP32 移到路由器旁边， RSSI 从 -67 dBm 提升到 -41 dBm。掉线照旧。</li>
+              <li>换信道，从自动跳到的 6 换到 1 和 11。掉线照旧。</li>
+              <li>把 2.4 GHz 上其余 11 个网络的占用情况扫了一遍，邻频干扰不算严重。掉线照旧。</li>
+              <li>关掉 Wi-Fi 省电模式（<code>wifi_ps_type_t</code> 设为 <code>WIFI_PS_NONE</code>）。掉线照旧。</li>
+              <li>甚至把 Agent 从虚拟机挪到宿主机，排除虚拟化网络的锅。掉线照旧。</li>
+            </ul>
+
+            <p>五轮下来，我手上唯一的收获是：<strong>Wi-Fi 不是原因，至少不是主因</strong>。
+              这个结论当时让我很沮丧，因为它意味着我排掉了最容易的那一类可能。</p>
+
+            <p>但有一行日志我没看懂，也一直没删掉。它出现在每次掉线前的最后一条：</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>esp32 · uart0 921600</span></div>
+    <pre>[09:14:05.104] E (41237) BT_BTM: btm_sec_disconnected
+    <span class="c">// BT_BTM？我这个项目根本没开蓝牙。</span></pre>
+            </div>
+
+            <p>我把它当成 SDK 的噪音日志忽略了。这是一个错误，我为此多花了两天。</p>
+
+            <figure class="figure">
+              <svg viewBox="0 0 800 300" role="img" aria-label="掉线周期时序示意">
+                <g stroke-opacity=".16" stroke-width="1" style="stroke:var(--text-3)">
+                  <path d="M40 90 H760 M40 160 H760 M40 230 H760"/>
+                </g>
+                <path d="M40 250 H764" stroke-width="1.6" fill="none" style="stroke:var(--text-3)"/>
+                <!-- 正常通信段 -->
+                <g stroke-width="2" fill="none" stroke-linecap="round" style="stroke:var(--text-3)">
+                  <path d="M56 200 v-22 M76 200 v-30 M96 200 v-18 M116 200 v-34 M136 200 v-24 M156 200 v-28"/>
+                  <path d="M300 200 v-26 M320 200 v-20 M340 200 v-32 M360 200 v-22 M380 200 v-30"/>
+                  <path d="M600 200 v-24 M620 200 v-30 M640 200 v-20 M660 200 v-34"/>
+                </g>
+                <!-- 沉默段 -->
+                <rect x="176" y="150" width="110" height="60" fill-opacity=".08" style="fill:var(--amber)"/>
+                <path d="M176 200 H286" stroke-width="2.4" fill="none" style="stroke:var(--amber)"/>
+                <text x="181" y="192" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--amber)">3.2 s 静默</text>
+                <rect x="410" y="150" width="110" height="60" fill-opacity=".08" style="fill:var(--amber)"/>
+                <path d="M410 200 H520" stroke-width="2.4" fill="none" style="stroke:var(--amber)"/>
+                <!-- 周期标注 -->
+                <g stroke-width="1.1" fill="none" stroke-dasharray="4 4" style="stroke:var(--text-3)">
+                  <path d="M56 268 V246 M56 246 H520 M520 246 V268"/>
+                </g>
+                <text x="250" y="262" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="12" fill-opacity=".7" style="fill:var(--text-3)">≈ 40 s</text>
+                <g font-family="ui-monospace,Consolas,monospace" font-size="12" fill-opacity=".55" style="fill:var(--text-3)">
+                  <text x="44" y="286">TX</text><text x="286" y="286">掉线</text><text x="600" y="286">恢复</text>
+                </g>
+              </svg>
+              <figcaption><b>图 01</b> — 30 分钟采样中提取的周期结构。静默段长度稳定在 3.2 ± 0.15 s。</figcaption>
+            </figure>
+
+            <h2><span class="h2num">03</span>把日志铺在地板上</h2>
+
+            <p>第二天下午我做了一件笨事：把三天积累的串口日志用 A4 纸打了出来，一共 47 页，铺在客厅地板上，
+              用三支不同颜色的马克笔标注——红色标掉线点，蓝色标重启，黄色标所有我不认识的日志行。</p>
+
+            <p>纸面上看，规律比屏幕里清楚得多。黄线几乎全部集中在掉线前的最后 200 毫秒内，
+              而且它们的来源高度一致：<code>BT_BTM</code>、<code>RTC_MODULE</code>、<code>adc</code>。
+              这些模块我没用过，但它们同时出现，指向的不是软件，是<strong>某个共同的上游</strong>。</p>
+
+            <p>芯片里能让蓝牙、RTC、ADC 同时报错的共同上游，只有两个：时钟和电源。</p>
+
+            <h2><span class="h2num">04</span>第二个假设：电源（对的）</h2>
+
+            <p>我拿了万用表，把探头点在开发板的 3V3 和 GND 上，然后盯着掉线时刻。</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>测量 · UNI-T UT61E · 3V3 引脚对 GND</span></div>
+    <pre>稳态        3.298 V
+    掉线前 1 s   3.291 V
+    掉线前 50 ms 2.874 V   <span class="c">// 瞬时跌落 0.42 V</span>
+    掉线瞬间    2.713 V   <span class="c">// 最低点，低于 ESP32 的 2.7 V 临界附近</span>
+    恢复        3.301 V</pre>
+            </div>
+
+            <p>0.42 V 的瞬时跌落，持续不到 100 毫秒。用万用表能看见，是因为我把采样调到最快挡并且盯着看；
+              用示波器看则更清楚——一个宽度约 80 ms 的凹陷，底部带振铃。</p>
+
+            <p>而这个凹陷的源头，最终锁定在供电路径上：ESP32 和一颗激光雷达传感器共用一路 5 V，
+              中间串着一根<strong>一米长的 USB 线</strong>。雷达电机每次转起来、每一次周期性提速，
+              就会拉一次电流尖峰；线阻加上去耦电容不足，尖峰直接反映成 3V3 上的跌落。</p>
+
+            <blockquote>
+              <p>40 秒这个周期，其实是雷达的一次自检 / 转速校准循环。
+                我以为它是通信层的计数器溢出，实际它是<strong>另一台设备的呼吸节奏</strong>。</p>
+            </blockquote>
+
+            <h2><span class="h2num">05</span>验证，而不是"修好"</h2>
+
+            <p>找到疑似根因之后，我没有直接改硬件。先做了三步验证，每一步都只改一个变量：</p>
+
+            <ol>
+              <li><strong>换电源</strong>：把共用 5 V 改成两路独立供电，雷达走单独的 DC-DC。掉线周期消失，连续运行 40 分钟零掉线。</li>
+              <li><strong>反向验证</strong>：把电源改回共用，同时在固件里把雷达的转速校准周期临时调到 12 秒。
+                掉线周期跟着变成 12 秒左右。<mark>这一步是关键证据</mark>——它证明周期由雷达决定，而不是由 ROS 通信栈决定。</li>
+              <li><strong>硬件兜底</strong>：恢复共用供电（工程上暂时没法改结构），在 3V3 侧补 470 µF 电解 +
+                100 nF 陶瓷，并缩短供电线到 20 cm。静默从 3.2 s 降到 0，连续跑 6 小时无掉线。</li>
+            </ol>
+
+            <p>第二步的反向验证是我最想留下的东西。修好一个 bug 很容易靠运气，但如果能让 bug 的频率<em>跟着你的手指变</em>，
+              那才说明你真的知道它在哪。</p>
+
+            <h2><span class="h2num">06</span>这天剩下的教训</h2>
+
+            <p>有三条，按对我自己的刺痛程度排序：</p>
+
+            <ul>
+              <li><strong>"规律"不等于"软件"。</strong>周期性故障一样可以是物理原因。机械动作、电机换相、
+                甚至是空调压缩机启停，都有周期。</li>
+              <li><strong>看不懂的日志不要忽略，要归类。</strong><code>BT_BTM</code> 那行我看了三天都当噪音。
+                如果我当时去查它属于哪个模块，第二天就能收工。</li>
+              <li><strong>先量化，再动手。</strong>第二天我一整天都在改代码，改的全是无效方向。
+                第一天那两小时的记录，才是这三天里最有价值的工作。</li>
+            </ul>
+
+            <p>最后是那台激光雷达。它一直在正常工作，从没报过错，也没有任何一行日志指向它。
+              它只是每 40 秒需要一次稍大的电流，而我给的线太细了。</p>
+
+            <dl class="revision">
+              <dt>2026.09.16 修订</dt>
+              <dd>补上第二步反向验证的数据（掉线周期随雷达校准周期变为 12 s）。初稿里我只写了"换电源后恢复"，那不构成证据。</dd>
+              <dt>2026.09.15 修订</dt>
+              <dd>初稿把根因写成"Wi-Fi 信道干扰"，结论错误，已全文重写。感谢读者 Z 在邮件里指出 40 s 周期与雷达电机声同步。</dd>
+            </dl>
+          </div>
+
+          <!-- ================= 边注 ================= -->
+          <aside class="notes">
+            <div class="notes__inner">
+              <div class="notes__toc"></div>
+              <p class="marginnote" style="margin-top:20px">
+                <b>为什么是 921600。</b> 默认 115200 下，ESP32 自己打印的日志会把 micro-ROS 的调试输出冲掉，
+                两边的相对时间关系就丢了。代价是长线容易丢字符——我用的是 20 cm 的短线。
+              </p>
+              <p class="marginnote">
+                <b>client 句柄变化</b>是判断"新会话"最省事的依据。Agent 打印的是内部指针值，
+                同一个物理设备重连后地址往往不同（这里是 0x3FFB2C40 → 0x3FFB1F88），一眼就能分辨是真重连还是心跳恢复。
+              </p>
+              <p class="marginnote">
+                <b>关于那 100 ms。</b> 局域网 ping 常年 100 ms 这件事我至今没彻底解决，但它和这次掉线无关——
+                换了电源之后，同样的 100 ms 延迟下通信依然稳定。延迟和掉线是两件事，别混在一起查。
+              </p>
+            </div>
+          </aside>
+        </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/local-llm-timing.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">那 7 秒里，6 秒在加载模型</span>
+      </a>
+      <a href="/posts/local-27b-on-8gb.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">8 GB 显存里塞一个 27B 模型</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/boot-log.html">
+          <span class="relitem__meta">09.20 · 固件</span>
+          <span class="relitem__title">读懂 ESP32 的启动日志</span>
+          <span class="relitem__sum">复位原因、最大连续内存块、分区地址账本——开机日志里最该看的四个地方。</span>
+        </a>
+        <a class="relitem" href="/posts/duplicate-handler.html">
+          <span class="relitem__meta">09.22 · 调试</span>
+          <span class="relitem__title">我改了那个函数，但跑的不是它</span>
+          <span class="relitem__sum">用三组对照排除两个方向，然后撞上有两个实现的 onAtmosphericDataReceived。</span>
+        </a>
+        <a class="relitem" href="/posts/micro-ros-agent.html">
+          <span class="relitem__meta">08.13 · 通信</span>
+          <span class="relitem__title">micro_ros_agent 装不上的三个原因</span>
+          <span class="relitem__sum">没有 apt 包、shell 没 source、GitHub 通道被拦——三件事在终端里长得一模一样。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="serial-log-day" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

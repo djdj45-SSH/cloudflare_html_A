@@ -1,0 +1,25 @@
+#!/bin/sh
+# 余量 MARGIN — git pre-commit 钩子（示例）
+#
+# 作用：提交前校验「生成产物」是否与 tools/ 下的源一致。
+# 如果忘了跑构建就提交，这里会拦下来——这是这套流程里最容易犯的错。
+#
+# 启用方式（在仓库根目录执行）：
+#   cp tools/pre-commit.sample .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# 临时跳过（不推荐）：git commit --no-verify
+
+node tools/build.mjs --check
+status=$?
+
+if [ $status -ne 0 ]; then
+  echo ""
+  echo "──────────────────────────────────────────────"
+  echo " 提交被阻止：上面的文件与 tools/ 下的源不一致。"
+  echo " 修复方式：node tools/build.mjs"
+  echo "──────────────────────────────────────────────"
+  exit 1
+fi
+
+exit 0

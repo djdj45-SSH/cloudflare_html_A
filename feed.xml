@@ -1,0 +1,2779 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>余量 MARGIN</title>
+    <link>https://margin.pages.dev/</link>
+    <description>一个嵌入式工程师的调试笔记：ESP32、micro-ROS、传感器与工作台。记录失败、数据，以及被推翻过的结论。</description>
+    <language>zh-CN</language>
+    <managingEditor>hello@example.com (MARGIN)</managingEditor>
+    <lastBuildDate>Sun, 20 Sep 2026 00:00:00 +0800</lastBuildDate>
+    <atom:link href="https://margin.pages.dev/feed.xml" rel="self" type="application/rss+xml"/>
+
+    <item>
+      <title>读懂 ESP32 的启动日志</title>
+      <link>https://margin.pages.dev/posts/boot-log.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/boot-log.html</guid>
+      <pubDate>Sun, 20 Sep 2026 00:00:00 +0800</pubDate>
+      <category>固件</category>
+      <description>复位原因、最大连续内存块、分区地址账本——开机日志里最该看的四个地方。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/boot-log.html">读懂 ESP32 的启动日志</a> · 2026.09.20</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">每次按下复位键，ESP32 都会先喷出三十来行字。它们滚得太快，又长得像乱码，
+      所以几乎所有人的第一反应都是「噪音，忽略」。我看它们看了两年，也是这么想的——
+      直到有一天，一块板子开始每隔几分钟自己重启，而我手上没有任何调试器。</p>
+
+    <p>那一次我才发现：<mark>这三十行里藏着芯片型号、晶振频率、内存余量、Flash 分区和编译参数</mark>，
+      全部是硬件层面的信息，不用写一行代码就能读到。它是这台设备失控之前，唯一愿意开口说话的时刻。</p>
+
+    <p>下面按出现的顺序，逐段拆开。</p>
+
+    <h2><span class="h2num">01</span>第一行就是个陷阱</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>uart0 · 115200</span></div>
+<pre>ets Jul 29 2019 12:21:46</pre>
+    </div>
+
+    <p>2019 年 7 月 29 日。看到这行的人常有两个误解：以为是固件的编译日期，或者以为自己不小心烧录了一个三年前的旧版本。</p>
+
+    <p>都不是。这是 <strong>bootloader 的编译时间戳</strong>——这一段代码由 Espressif 出厂时就固化在芯片里，
+      他们多年没有改动过它，所以这个日期在你的板子上、在我的板子上、在别人刚拆封的新板子上，完全一样。
+      它不是一个会变化的信息，看到它就当没看到。</p>
+
+    <p>真正的固件编译时间是后面 <code>Software Info</code> 里的那一行，我们等会儿会走到那里。</p>
+
+    <h2><span class="h2num">02</span>复位原因与启动模式</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>bootloader</span></div>
+<pre>rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+mode:DIO, clock div:1</pre>
+    </div>
+
+    <p><code>rst:</code> 后面这个十六进制数是<strong>复位原因</strong>。
+      <code>0x1</code> 是上电复位，也就是你拔插电源、或者按下复位键时会看到的那种；除此之外还有软件复位、
+      看门狗复位、欠压复位等等。这一行是排查「设备莫名其妙重启」的起点：
+      如果是看门狗，说明你的某段代码把 CPU 卡住了；如果指向欠压，那就去查电源——
+      我在<a href="https://margin.pages.dev/posts/serial-log-day.html">另一篇笔记</a>里就是靠这个思路找到电源问题的。
+      完整的码表在 ESP-IDF 的 <code>esp_reset_reason()</code> 文档里，不用背。</p>
+
+    <p><code>boot:0x13</code> 是启动模式，括号里的 <code>SPI_FAST_FLASH_BOOT</code> 才是给人看的部分——
+      意思是「从 SPI Flash 里快速启动」，这是正常工作时的取值。
+      如果你把它做成产品，客户不小心把某个引脚拉低了，这里会变成别的模式，
+      然后就表现为「板子通电没反应」。</p>
+
+    <p>中间那两行 <code>configsip</code>、<code>clk_drv</code> 之类，是 bootloader 读到的 Flash 配置
+      和各信号线的驱动能力。它们平时是固定的，只有在<em>换了 Flash 芯片或者改了硬件</em>之后才会变——
+      所以它们的用途是「记住正常时的样子」，将来出问题了拿来对比。</p>
+
+    <p>最后 <code>mode:DIO, clock div:1</code> 值得注意：bootloader 阶段这里用的是 <strong>DIO（双线）</strong>，
+      而几分钟后你会看到 Flash Info 里写的是 <strong>QIO（四线）</strong>。
+      这不矛盾——ROM 阶段还没能力协商，只好用最保守的方式先把代码读进来，之后才切到更快的模式。</p>
+
+    <h2><span class="h2num">03</span>三段 load：镜像有没有坏</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>bootloader</span></div>
+<pre>load:0x3fff0030,len:4876
+load:0x40078000,len:16560
+load:0x40080400,len:3500
+entry 0x400805b4</pre>
+    </div>
+
+    <p>这是 bootloader 把自己从 Flash 搬进内存的过程：地址、长度、三段。
+      平时完全不用管，但有一种情况例外——<strong>如果这三行里出现校验失败或者长度异常，说明 Flash 里的镜像损坏了</strong>，
+      常见原因是烧录到一半拔线、或者供电不稳写坏了页。</p>
+
+    <p><code>entry</code> 是跳转到应用程序入口的地址。看到它出现，就意味着「bootloader 干完了，接下来是固件的事」。</p>
+
+    <p>所以判断一个「通电没反应」的板子卡在哪一层，看日志停在哪一行就知道了：
+      停在 <code>rst:</code> 附近是 bootloader 阶段的问题，停在 <code>entry</code> 之后就是固件的问题。</p>
+
+    <h2><span class="h2num">04</span>芯片信息：你手上到底是什么</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>Chip Info</span></div>
+<pre>  Model             : ESP32
+  Package           : D0WD-Q5
+  Revision          : 3.01
+  Cores             : 2
+  CPU Frequency     : 240 MHz
+  XTAL Frequency    : 40 MHz
+  Embedded Flash    : No
+  Embedded PSRAM    : No
+  2.4GHz WiFi       : Yes
+  Classic BT        : Yes</pre>
+    </div>
+
+    <p><code>Package: D0WD-Q5</code> 给出的是这颗 die 的型号和封装代号。
+      它有用是因为——模组厂商在同一个「ESP32-WROOM-32」的名字下，装过不同批次的芯片，
+      而某些低功耗特性、蓝牙行为在修订版之间有差异。<code>Revision: 3.01</code> 就是芯片的修订版号。</p>
+
+    <p><code>XTAL Frequency: 40 MHz</code> 是外部晶振。往下拉几行你会看到固件启动时打印的一句：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>esp32-hal-cpu.c</span></div>
+<pre>[     3][D][esp32-hal-cpu.c:324] setCpuFrequencyMhz(): PLL: 480 / 2 = 240 Mhz, APB: 80000000 Hz</pre>
+    </div>
+
+    <p>240 MHz 是怎么来的，日志直接告诉你了：480 MHz 的 PLL 二分频。
+      方括号里的 <code>3</code> 是开机后的毫秒数——三毫秒，它已经把主频设好了。</p>
+
+    <p>另外 <code>Embedded Flash: No</code> 和 <code>Embedded PSRAM: No</code> 这两行，
+      是回答「我这颗芯片到底带不带内置 Flash / PSRAM」的最快方式，
+      比查数据手册快得多——尤其是当你手上只有一块来源不明的开发板时。</p>
+
+    <h2><span class="h2num">05</span>内存：为什么不是 520 KB</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>INTERNAL Memory Info</span></div>
+<pre>  Total Size        :   376480 B ( 367.7 KB)
+  Free Bytes        :   333984 B ( 326.2 KB)
+  Allocated Bytes   :    34744 B (  33.9 KB)
+  Minimum Free Bytes:   328368 B ( 320.7 KB)
+  Largest Free Block:   110580 B ( 108.0 KB)</pre>
+    </div>
+
+    <p>ESP32 的 SRAM 标称 520 KB，这里却只有 367.7 KB。差额不是被谁偷了——
+      它是 ROM 里的代码、启动时的静态分配、以及协议栈占掉的部分。
+      所以这一行反映的是<strong>「系统初始化之后，留给动态分配的堆总量」</strong>，比标称值更接近你能用的现实。</p>
+
+    <p>这五个数字里，我认为最该盯的是最后两个，而不是 <code>Free Bytes</code>：</p>
+
+    <ul>
+      <li><strong>Minimum Free Bytes</strong> 是历史最低水位。设备跑了一整天之后回来看这个值，
+        就知道它最紧张的时候剩下多少——这个数字比「当前还剩多少」有意义得多。</li>
+      <li><strong>Largest Free Block</strong> 是<em>最大的一块连续空闲</em>。总共剩 326 KB，
+        但最大连续块只有 108 KB，意味着你想 <code>malloc</code> 一个 200 KB 的缓冲区会失败，
+        <mark>尽管「总空闲」看起来完全够</mark>。内存碎片就是这么咬人的。</li>
+    </ul>
+
+    <p>那一次我遇到的「跑几小时就自己重启」，最后就是靠这两行定位的：
+      Free 一直在 300 KB 以上，看着很健康，但 Largest Free Block 从 108 KB 一路缩到 30 多 KB，
+      最后某个需要连续内存的操作失败，触发了复位。</p>
+
+    <h2><span class="h2num">06</span>分区表：一本地址账本</h2>
+
+    <p>这是我后来觉得最值得看的一段。它把整块 Flash 按地址切给了不同用途：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>Partitions Info</span></div>
+<pre>                nvs : addr: 0x00009000, size:    20.0 KB, type: DATA, subtype: NVS
+            otadata : addr: 0x0000E000, size:     8.0 KB, type: DATA, subtype: OTA
+               app0 : addr: 0x00010000, size:  1280.0 KB, type:  APP, subtype: OTA_0
+               app1 : addr: 0x00150000, size:  1280.0 KB, type:  APP, subtype: OTA_1
+             spiffs : addr: 0x00290000, size:  1408.0 KB, type: DATA, subtype: SPIFFS
+           coredump : addr: 0x003F0000, size:    64.0 KB, type: DATA, subtype: COREDUMP</pre>
+    </div>
+
+    <p>把地址当成账目来核对一遍，你会发现它严丝合缝：</p>
+
+    <ul>
+      <li><code>app0</code> 从 <code>0x010000</code>（64 KB）开始，占 1280 KB，结束于 64 + 1280 = 1344 KB = <code>0x150000</code>；</li>
+      <li>这正好是 <code>app1</code> 的起始地址。app1 再加 1280 KB，到 2624 KB = <code>0x290000</code>；</li>
+      <li>这正好是 <code>spiffs</code> 的起始地址。spiffs 加 1408 KB，到 4032 KB = <code>0x3F0000</code>；</li>
+      <li>这正好是 <code>coredump</code> 的起始地址。再加 64 KB ——<strong>刚好 4096 KB，也就是 4 MB</strong>。</li>
+    </ul>
+
+    <p>一个字节不多，一个字节不少。这说明<em>分区表不是随便填的，它是按芯片容量精算出来的</em>。
+      看懂这本账，你就能回答两个很实际的问题：</p>
+
+    <p><strong>第一，我的固件还能长多大？</strong> app0 和 app1 各 1280 KB，
+      意味着你的固件必须同时塞进这两个槽（OTA 需要备份槽），所以<strong>上限就是 1280 KB</strong>。
+      编译时如果报 <code>Sketch too big</code>，数字就是从这里来的。</p>
+
+    <p><strong>第二，文件存储还剩多少？</strong> <code>spiffs</code> 的 1408 KB 就是你能用来存图片、
+      日志、配置文件的全部空间。它不会随着你的固件变大而变大——它是固定的。</p>
+
+    <p>顺带一提，<code>coredump</code> 那 64 KB 是留给崩溃现场快照的。
+      如果它在账本里被删掉了，你的设备崩溃时就不会留下可分析的转储。</p>
+
+    <h2><span class="h2num">07</span>最后几行：找出日志为什么这么多</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>Software / Board Info</span></div>
+<pre>  Compile Date/Time : Aug 21 2026 01:37:10
+  Compile Host OS   : windows
+  ESP-IDF Version   : v5.5.4
+  Arduino Version   : 3.3.10
+
+  Arduino FQBN      : esp32:esp32:esp32:UploadSpeed=921600,CPUFreq=240,
+                      FlashFreq=80,FlashMode=qio,FlashSize=4M,PartitionScheme=default,
+                      DebugLevel=verbose,PSRAM=disabled,LoopCore=1,EventsCore=1,EraseFlash=none</pre>
+    </div>
+
+    <p><code>Compile Date/Time</code> 才是真正的固件编译时间。
+      「我明明改了代码，怎么行为没变？」——先看这一行。它没变，说明你烧的不是你以为的那个固件。</p>
+
+    <p>而 FQBN 那一长串，是整个启动日志里最实用的一行，因为它把你的<strong>编译选项全部抄了一遍</strong>：
+      上传波特率、主频、Flash 频率与模式、Flash 容量、分区方案，一个不落。</p>
+
+    <p>如果你好奇「为什么我的串口刷得这么快、全是 <code>[V]</code> 开头的行」——
+      答案就在里面：<code>DebugLevel=verbose</code>。这是 Arduino IDE 里
+      <em>Tools → Core Debug Level</em> 被设成了 verbose 的结果。改成 <code>None</code>，
+      你的串口立刻安静下来，只剩你自己打印的东西：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>verbose 级别的日志长这样</span></div>
+<pre>[   529][V][esp32-hal-uart.c:807] uartSetPins(): UART0: Driver not yet installed,
+                                storing pins for later attachment (RX:3, TX:1)
+[   666][D][esp32-hal-uart.c:882] uartSetPins(): Attaching pin 3 to UART0 as RX
+[   673][V][esp32-hal-periman.c:173] perimanSetPinBus(): Pin 3 successfully set to
+                                type UART_RX (2) with bus 0x3ffbdb68</pre>
+    </div>
+
+    <p>这些行在说「把 GPIO3 接到 UART0 的 RX 上」，对调试外设冲突其实有用——
+      它能告诉你某个引脚被谁占用了。但如果你不需要，它就是纯占地方。</p>
+
+    <h2><span class="h2num">08</span>现在我会怎么看这三十行</h2>
+
+    <p>按顺序扫四个地方就够了：</p>
+
+    <ol>
+      <li><code>rst:</code> —— 设备是<strong>为什么</strong>醒过来的。这是排查重启类问题的唯一入口。</li>
+      <li><code>Largest Free Block</code> —— 内存<strong>还有没有可能</strong>分配大块。别只看 Free。</li>
+      <li><code>Partitions Info</code> —— 固件和数据<strong>还有多少空间</strong>。算一遍地址账。</li>
+      <li><code>FQBN</code> 与 <code>Compile Date/Time</code> —— 现在跑的<strong>到底是哪一个</strong>固件、带什么编译选项。</li>
+    </ol>
+
+    <p>这四件事都不需要额外的工具，插上 USB 就能读。
+      对一个没有调试器、板子又开始不听话的下午来说，这已经是很好的起点了。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月的一段串口记录与当时的排查笔记。日志原文来自
+        ESP32-WROOM-32E（ESP-IDF v5.5.4 / Arduino 3.3.10），未作删改。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>补上了 0x3F0000 + 64 KB = 0x400000 的地址核对过程——当初只是觉得「数字对得上」，没有真的算过。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>8 GB 显存里塞一个 27B 模型</title>
+      <link>https://margin.pages.dev/posts/local-27b-on-8gb.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/local-27b-on-8gb.html</guid>
+      <pubDate>Sat, 19 Sep 2026 00:00:00 +0800</pubDate>
+      <category>工具链</category>
+      <description>GGUF 不等于兼容性保证、手动 -ngl 会关掉自动拟合，以及上下文长度对生成速度的真实影响。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/local-27b-on-8gb.html">8 GB 显存里塞一个 27B 模型</a> · 2026.09.19</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">我手上有一台 8 GB 显存的笔记本，想在本地跑一个 27B 的模型。</p>
+
+    <p>按照参数量估算，这个规模即使做激进量化，通常也要十几 GB 显存——8 GB 看起来不该够。
+      但有一个例外：如果量化到<strong>三值</strong>（每个权重只有 -1、0、+1 三种取值），
+      那 27B 参数就只需要 27 × 1.58 ÷ 8 ≈ <strong>5.3 GB</strong>。数字上刚好能塞进去。</p>
+
+    <p>于是我从"加载失败"开始，一路撞到"上下文越长越慢"，中间还遇上一次参数和程序互相打架。
+      三个问题都留下了完整的日志，这篇就是把它们读一遍。</p>
+
+    <h2><span class="h2num">01</span>第一个问题：加载失败，但报错没告诉你为什么</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>LM Studio / llama.cpp</span></div>
+<pre>Failed to load model.
+error loading model: llama_model_loader: failed to load model from
+  D:\LM models\...\Bonsai-2-27B-PTQ1_0-CRACK.gguf</pre>
+    </div>
+
+    <p>这个报错几乎没有信息量。"failed to load model" 可能意味着文件损坏、
+      内存不足、路径有问题，或者——就像这次——<strong>格式不被识别</strong>。</p>
+
+    <p>原因是这个模型的量化类型叫 <code>PTQ1_0</code>。
+      GGUF 文件头里会写一个<em>量化类型编号</em>，而 <code>PTQ1_0</code> 是一个较新的编号，
+      标准版的 llama.cpp 里没有对应的解码器，于是它在读文件头的时候就放弃了。</p>
+
+    <blockquote>
+      <p>这里有一条容易踩错的认知：<strong>GGUF 是一种容器格式，不是兼容性保证。</strong>
+        它规定了元数据和张量要怎么摆放，但每个张量可以是任意一种量化类型。
+        文件名后缀（<code>Q4_K_M</code>、<code>IQ2_XS</code>、<code>PTQ1_0</code>……）
+        才是决定能不能加载的东西。</p>
+    </blockquote>
+
+    <p>解决方式是换一个支持这种类型的 llama.cpp 构建（上游分支或社区 fork 都行）。
+      有一条经验值得记住：<strong>不要用不支持的标准版强行加载</strong>。
+      有些实现不会报错，而是把不认识的权重按错误的方式解码，
+      结果就是模型能跑、但输出一塌糊涂——那种故障比直接加载失败难查十倍。</p>
+
+    <h2><span class="h2num">02</span>第二个问题：参数和程序打架</h2>
+
+    <p>换了后端之后，模型能加载了。但启动日志里冒出一行警告，我盯着看了很久：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>启动日志</span></div>
+<pre>common_fit_params: failed to fit params to free device memory:
+  n_gpu_layers already set by user to 75, abort</pre>
+    </div>
+
+    <p>字面意思是「参数拟合失败」，读起来像出错了。但实际含义恰恰相反：</p>
+
+    <p>llama.cpp 在启动时会做一件事——<strong>自己算一遍</strong>「你这台机器的空闲显存能放几层，
+      然后自动决定 <code>-ngl</code> 的值」。可我在命令行里已经手动写了 <code>-ngl 75</code>，
+      它一看我指定过了，就<em>放弃自动计算</em>（<code>abort</code> 在这里是"我不管了"的意思，
+      不是"程序终止了"）。</p>
+
+    <p>所以这行日志真正的含义是：<strong>接下来的显存管理，责任归你了。</strong>
+      它不再是错误，而是一次责任移交。要确认移交得好不好，只能自己去看：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>看显存的实际占用</span></div>
+<pre>nvidia-smi -l 1</pre>
+    </div>
+
+    <p>盯几秒，看三件事：显存是否接近上限、GPU 利用率高不高、
+      有没有出现"共享显存"（一旦开始借用系统内存，速度会断崖式下降）。</p>
+
+    <h2><span class="h2num">03</span>第三个问题：上下文越长，生成越慢</h2>
+
+    <p>这才是真正重要的一段。我把那两小时日志里的生成速度按上下文长度整理出来：</p>
+
+    <table>
+      <thead>
+        <tr><th>上下文长度</th><th>生成速度</th><th>处理输入的速度</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>约 9K</td><td>19.6 tokens/s</td><td>248 tokens/s</td></tr>
+        <tr><td>约 25K</td><td>18 – 19 tokens/s</td><td>—</td></tr>
+        <tr><td>约 40K</td><td>16 – 18 tokens/s</td><td>~178 tokens/s</td></tr>
+        <tr><td>约 50K</td><td>13 – 15 tokens/s</td><td>—</td></tr>
+        <tr><td>接近 64K</td><td>8 – 13 tokens/s</td><td>~140 tokens/s</td></tr>
+      </tbody>
+    </table>
+
+    <p><mark>从 20 掉到 8，衰减了六成。</mark>而这不是故障，是这个配置的必然结果——
+      因为注意力机制每一轮都要读一遍前面所有 token 的 KV 缓存，
+      上下文翻一倍，这部分开销也跟着翻。</p>
+
+    <p>日志里还有一条间接证据，说明缓存已经吃紧：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>提示缓存被清理</span></div>
+<pre>making room for prompt cache entry, removing oldest entry
+  (size = 612.442 MiB / 1263.644 MiB)</pre>
+    </div>
+
+    <p>为腾出空间，旧的提示缓存条目被丢掉了——
+      这意味着<strong>下次问到相关内容时，那部分 prefix 得重新计算一遍</strong>。
+      在长上下文下，重算的代价是几十秒级的。</p>
+
+    <h2><span class="h2num">04</span>三个参数，各管一件事</h2>
+
+    <p>理清上面的现象之后，调参就不再是碰运气了。启动命令里真正影响体验的只有三个：</p>
+
+    <table>
+      <thead>
+        <tr><th>参数</th><th>管什么</th><th>怎么定</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>-ngl</code></td>
+          <td>有多少层放到 GPU 上跑</td>
+          <td>显存够就往上加，直到 <code>nvidia-smi</code> 显示接近上限但没溢出</td>
+        </tr>
+        <tr>
+          <td><code>-c</code></td>
+          <td>上下文长度</td>
+          <td><strong>最影响速度的一刀。</strong> 64K 和 16K 是两个世界</td>
+        </tr>
+        <tr>
+          <td><code>--cache-type-k/v</code></td>
+          <td>KV 缓存用什么精度存</td>
+          <td><code>q4_0</code> 省显存、损质量；显存有余量就上 <code>q8_0</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>还有一个 <code>-fa on</code>（Flash Attention），它的作用是让注意力计算不需要把整个矩阵展开，
+      省显存也更省带宽。这个我建议一直开着——除非你的显卡架构不支持。</p>
+
+    <p>把这三者串起来看，思路就清楚了：<strong><code>-c</code> 决定你要花多少显存，
+      <code>--cache-type-*</code> 决定每单位缓存占多少显存，<code>-ngl</code> 决定剩下的够不够放模型。</strong>
+      三者是一道加法题，不是三个独立的开关。</p>
+
+    <h2><span class="h2num">05</span>两个容易被忽略的细节</h2>
+
+    <p><strong>第一，日志里的时间戳不好读。</strong>它长这样：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>日志行首</span></div>
+<pre>0.00.025.059  ...
+1.52.339.120  ...
+124.59.846.001  ...</pre>
+    </div>
+
+    <p>四段数字，格式是「分钟 . 秒 . 毫秒 . 微秒」。所以
+      <code>124.59.846.001</code> 是「第 124 分 59.846001 秒」，约两小时。
+      我第一次看以为第一段是小时，算出来一个不可能的数字——
+      这类格式在读日志时值得先确认一次，不然时间轴会整个错位。</p>
+
+    <p><strong>第二，服务默认没有访问控制。</strong></p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>启动时的警告</span></div>
+<pre>CORS is set to allow all origins ('*') and no API key is set
+this can be a security risk</pre>
+    </div>
+
+    <p>它默认只监听 <code>127.0.0.1</code>，所以在本机上用风险不大。
+      但如果你想从别的设备访问（就像我在
+      <a href="https://margin.pages.dev/posts/local-llm-timing.html">另一篇笔记</a>里那样改成 <code>0.0.0.0</code>），
+      就必须同时加上访问密钥，否则等于把一个可以随便调用的模型接口挂在了网上。</p>
+
+    <h2><span class="h2num">06</span>8 GB 显存到底能做什么</h2>
+
+    <p>这份日志跑了两小时出头，中途有几次客户端主动取消任务，
+      最后正常退出、没有崩溃。所以我的结论是：</p>
+
+    <ul>
+      <li><strong>能跑</strong>。一个 27B 的三值量化模型，在 8 GB 显存 + 16 GB 内存的笔记本上可以稳定运行。</li>
+      <li><strong>但不快</strong>。短上下文约 20 tokens/s，接近 64K 时掉到 8–13。
+        换算一下，8 tokens/s 大约相当于每秒出五六个汉字——能读，但要等。</li>
+      <li><strong>最划算的调法是降上下文</strong>，不是加 <code>-ngl</code>。
+        32K 上下文的速度明显好于 64K，而多数日常对话根本用不到 64K。</li>
+    </ul>
+
+    <p>这件事让我对"本地跑模型"有了一个更具体的认识：
+      真正决定体验的不是模型有多大，而是<em>你打算让它记住多长的上下文</em>。
+      参数表上的"支持 128K 上下文"是能力上限，不是推荐值——
+      把它当默认值用，代价会体现在每一次生成的速度上。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自一份两小时的 llama-server 运行日志与相应的排查记录。
+        机型为 Ryzen 7 7735H + RTX 4060（8 GB）+ 16 GB 内存，模型为 27B 三值量化。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>把「加载失败」和「性能衰减」合成了一篇——它们本来是同一次折腾的前后两段，
+        分开看只是两个孤立的问题，串起来才是一条完整的"从跑不动到跑起来再到跑得快"的路径。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>串口日志里的一天</title>
+      <link>https://margin.pages.dev/posts/serial-log-day.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/serial-log-day.html</guid>
+      <pubDate>Mon, 14 Sep 2026 00:00:00 +0800</pubDate>
+      <category>调试笔记</category>
+      <description>设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上，才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/serial-log-day.html">串口日志里的一天</a> · 2026.09.14</em></p>
+    <div class="wrap article-body">
+      <!-- ================= 正文 ================= -->
+      <div class="prose">
+        <p class="first">那天早上九点，我把串口监视器打开，泡了杯咖啡，打算二十分钟内解决一个"小问题"。
+          下午六点，咖啡续了四杯，问题还在，而我开始怀疑自己过去三年学的每一件事。</p>
+
+        <p>现象很干净，干净得反常：ESP32 上的 micro-ROS 客户端每隔大约 40 秒就会和 Agent 断开一次，
+          重连耗时 3 到 4 秒，然后一切恢复正常。不是偶发，不是随机，是<mark>精确的、可重复的、带着节拍的</mark>。
+          这种规律性通常意味着它不是干扰，而是某个计数器溢出了，或者某个定时器到期了。</p>
+
+        <h2><span class="h2num">01</span>先把现象量化</h2>
+
+        <p>我没有立刻改代码。经验告诉我，在没摸清边界条件之前动手，只会把水搅浑。我先花了两个小时做一件事：
+          记录。Agent 侧开着 <code>-v6</code>，ESP32 侧串口波特率提到 921600，两边的时间戳都打上，跑了 30 分钟。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>agent · ros2 run micro_ros_agent -v6</span></div>
+<pre><span class="c"># 一次完整的掉线—重连周期，时间戳为本地时钟</span>
+[09:14:02.311] DEBUG  client 0x3FFB2C40 &lt;--  send message 42 bytes
+[09:14:02.318] DEBUG  client 0x3FFB2C40 --&gt;  recv ack
+<span class="c"># 此后 3.2 秒内，Agent 侧没有任何一行输出</span>
+[09:14:05.520] WARN   client 0x3FFB2C40 : transport timeout, closing session
+[09:14:05.521] INFO   session closed, 1 clients remaining: 0
+[09:14:08.744] INFO   new session: client 0x3FFB1F88 (udp 192.168.1.11:8888)
+[09:14:08.901] DEBUG  client 0x3FFB1F88 &lt;--  send message 42 bytes</pre>
+        </div>
+
+        <p>关键数字有三个：周期约 40 秒，静默 3.2 秒，重连后 <code>client</code> 句柄变了。
+          第三点很重要——句柄变化说明 Agent 认为这是一个<em>新会话</em>，不是原来的连接被续上。
+          也就是说，ESP32 那边主动重启了 transport，或者压根重启了整个任务。</p>
+
+        <blockquote>
+          <p>我第一反应是 Wi-Fi。因为它是这套系统里最不可靠的一环，而且我手上有现成的数据：
+            局域网 ping 常年 100 ms 上下——这个数我一直觉得不对劲，但从来没认真追过。</p>
+        </blockquote>
+
+        <h2><span class="h2num">02</span>第一个假设：Wi-Fi（错的）</h2>
+
+        <p>于是我做了所有 Wi-Fi 问题该做的检查。</p>
+
+        <ul>
+          <li>把 ESP32 移到路由器旁边， RSSI 从 -67 dBm 提升到 -41 dBm。掉线照旧。</li>
+          <li>换信道，从自动跳到的 6 换到 1 和 11。掉线照旧。</li>
+          <li>把 2.4 GHz 上其余 11 个网络的占用情况扫了一遍，邻频干扰不算严重。掉线照旧。</li>
+          <li>关掉 Wi-Fi 省电模式（<code>wifi_ps_type_t</code> 设为 <code>WIFI_PS_NONE</code>）。掉线照旧。</li>
+          <li>甚至把 Agent 从虚拟机挪到宿主机，排除虚拟化网络的锅。掉线照旧。</li>
+        </ul>
+
+        <p>五轮下来，我手上唯一的收获是：<strong>Wi-Fi 不是原因，至少不是主因</strong>。
+          这个结论当时让我很沮丧，因为它意味着我排掉了最容易的那一类可能。</p>
+
+        <p>但有一行日志我没看懂，也一直没删掉。它出现在每次掉线前的最后一条：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>esp32 · uart0 921600</span></div>
+<pre>[09:14:05.104] E (41237) BT_BTM: btm_sec_disconnected
+<span class="c">// BT_BTM？我这个项目根本没开蓝牙。</span></pre>
+        </div>
+
+        <p>我把它当成 SDK 的噪音日志忽略了。这是一个错误，我为此多花了两天。</p>
+
+        <figure class="figure">
+          <svg viewBox="0 0 800 300" role="img" aria-label="掉线周期时序示意">
+            <g stroke-opacity=".16" stroke-width="1" style="stroke:var(--text-3)">
+              <path d="M40 90 H760 M40 160 H760 M40 230 H760"/>
+            </g>
+            <path d="M40 250 H764" stroke-width="1.6" fill="none" style="stroke:var(--text-3)"/>
+            <!-- 正常通信段 -->
+            <g stroke-width="2" fill="none" stroke-linecap="round" style="stroke:var(--text-3)">
+              <path d="M56 200 v-22 M76 200 v-30 M96 200 v-18 M116 200 v-34 M136 200 v-24 M156 200 v-28"/>
+              <path d="M300 200 v-26 M320 200 v-20 M340 200 v-32 M360 200 v-22 M380 200 v-30"/>
+              <path d="M600 200 v-24 M620 200 v-30 M640 200 v-20 M660 200 v-34"/>
+            </g>
+            <!-- 沉默段 -->
+            <rect x="176" y="150" width="110" height="60" fill-opacity=".08" style="fill:var(--amber)"/>
+            <path d="M176 200 H286" stroke-width="2.4" fill="none" style="stroke:var(--amber)"/>
+            <text x="181" y="192" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--amber)">3.2 s 静默</text>
+            <rect x="410" y="150" width="110" height="60" fill-opacity=".08" style="fill:var(--amber)"/>
+            <path d="M410 200 H520" stroke-width="2.4" fill="none" style="stroke:var(--amber)"/>
+            <!-- 周期标注 -->
+            <g stroke-width="1.1" fill="none" stroke-dasharray="4 4" style="stroke:var(--text-3)">
+              <path d="M56 268 V246 M56 246 H520 M520 246 V268"/>
+            </g>
+            <text x="250" y="262" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="12" fill-opacity=".7" style="fill:var(--text-3)">≈ 40 s</text>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="12" fill-opacity=".55" style="fill:var(--text-3)">
+              <text x="44" y="286">TX</text><text x="286" y="286">掉线</text><text x="600" y="286">恢复</text>
+            </g>
+          </svg>
+          <figcaption><b>图 01</b> — 30 分钟采样中提取的周期结构。静默段长度稳定在 3.2 ± 0.15 s。</figcaption>
+        </figure>
+
+        <h2><span class="h2num">03</span>把日志铺在地板上</h2>
+
+        <p>第二天下午我做了一件笨事：把三天积累的串口日志用 A4 纸打了出来，一共 47 页，铺在客厅地板上，
+          用三支不同颜色的马克笔标注——红色标掉线点，蓝色标重启，黄色标所有我不认识的日志行。</p>
+
+        <p>纸面上看，规律比屏幕里清楚得多。黄线几乎全部集中在掉线前的最后 200 毫秒内，
+          而且它们的来源高度一致：<code>BT_BTM</code>、<code>RTC_MODULE</code>、<code>adc</code>。
+          这些模块我没用过，但它们同时出现，指向的不是软件，是<strong>某个共同的上游</strong>。</p>
+
+        <p>芯片里能让蓝牙、RTC、ADC 同时报错的共同上游，只有两个：时钟和电源。</p>
+
+        <h2><span class="h2num">04</span>第二个假设：电源（对的）</h2>
+
+        <p>我拿了万用表，把探头点在开发板的 3V3 和 GND 上，然后盯着掉线时刻。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>测量 · UNI-T UT61E · 3V3 引脚对 GND</span></div>
+<pre>稳态        3.298 V
+掉线前 1 s   3.291 V
+掉线前 50 ms 2.874 V   <span class="c">// 瞬时跌落 0.42 V</span>
+掉线瞬间    2.713 V   <span class="c">// 最低点，低于 ESP32 的 2.7 V 临界附近</span>
+恢复        3.301 V</pre>
+        </div>
+
+        <p>0.42 V 的瞬时跌落，持续不到 100 毫秒。用万用表能看见，是因为我把采样调到最快挡并且盯着看；
+          用示波器看则更清楚——一个宽度约 80 ms 的凹陷，底部带振铃。</p>
+
+        <p>而这个凹陷的源头，最终锁定在供电路径上：ESP32 和一颗激光雷达传感器共用一路 5 V，
+          中间串着一根<strong>一米长的 USB 线</strong>。雷达电机每次转起来、每一次周期性提速，
+          就会拉一次电流尖峰；线阻加上去耦电容不足，尖峰直接反映成 3V3 上的跌落。</p>
+
+        <blockquote>
+          <p>40 秒这个周期，其实是雷达的一次自检 / 转速校准循环。
+            我以为它是通信层的计数器溢出，实际它是<strong>另一台设备的呼吸节奏</strong>。</p>
+        </blockquote>
+
+        <h2><span class="h2num">05</span>验证，而不是"修好"</h2>
+
+        <p>找到疑似根因之后，我没有直接改硬件。先做了三步验证，每一步都只改一个变量：</p>
+
+        <ol>
+          <li><strong>换电源</strong>：把共用 5 V 改成两路独立供电，雷达走单独的 DC-DC。掉线周期消失，连续运行 40 分钟零掉线。</li>
+          <li><strong>反向验证</strong>：把电源改回共用，同时在固件里把雷达的转速校准周期临时调到 12 秒。
+            掉线周期跟着变成 12 秒左右。<mark>这一步是关键证据</mark>——它证明周期由雷达决定，而不是由 ROS 通信栈决定。</li>
+          <li><strong>硬件兜底</strong>：恢复共用供电（工程上暂时没法改结构），在 3V3 侧补 470 µF 电解 +
+            100 nF 陶瓷，并缩短供电线到 20 cm。静默从 3.2 s 降到 0，连续跑 6 小时无掉线。</li>
+        </ol>
+
+        <p>第二步的反向验证是我最想留下的东西。修好一个 bug 很容易靠运气，但如果能让 bug 的频率<em>跟着你的手指变</em>，
+          那才说明你真的知道它在哪。</p>
+
+        <h2><span class="h2num">06</span>这天剩下的教训</h2>
+
+        <p>有三条，按对我自己的刺痛程度排序：</p>
+
+        <ul>
+          <li><strong>"规律"不等于"软件"。</strong>周期性故障一样可以是物理原因。机械动作、电机换相、
+            甚至是空调压缩机启停，都有周期。</li>
+          <li><strong>看不懂的日志不要忽略，要归类。</strong><code>BT_BTM</code> 那行我看了三天都当噪音。
+            如果我当时去查它属于哪个模块，第二天就能收工。</li>
+          <li><strong>先量化，再动手。</strong>第二天我一整天都在改代码，改的全是无效方向。
+            第一天那两小时的记录，才是这三天里最有价值的工作。</li>
+        </ul>
+
+        <p>最后是那台激光雷达。它一直在正常工作，从没报过错，也没有任何一行日志指向它。
+          它只是每 40 秒需要一次稍大的电流，而我给的线太细了。</p>
+
+        <dl class="revision">
+          <dt>2026.09.16 修订</dt>
+          <dd>补上第二步反向验证的数据（掉线周期随雷达校准周期变为 12 s）。初稿里我只写了"换电源后恢复"，那不构成证据。</dd>
+          <dt>2026.09.15 修订</dt>
+          <dd>初稿把根因写成"Wi-Fi 信道干扰"，结论错误，已全文重写。感谢读者 Z 在邮件里指出 40 s 周期与雷达电机声同步。</dd>
+        </dl>
+      </div>
+
+      <!-- ================= 边注 ================= -->
+      
+    </div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>那 7 秒里，6 秒在加载模型</title>
+      <link>https://margin.pages.dev/posts/local-llm-timing.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/local-llm-timing.html</guid>
+      <pubDate>Mon, 31 Aug 2026 00:00:00 +0800</pubDate>
+      <category>工具链</category>
+      <description>让它对外说话、确认它在用什么算，以及把 7.13 秒拆成加载、读题、作答三笔账。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/local-llm-timing.html">那 7 秒里，6 秒在加载模型</a> · 2026.08.31</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">一台没有独立显卡的机器，我想在上面跑一个语言模型，并且让局域网里的其他设备也能调用它。</p>
+
+    <p>装的部分没什么好说的，一条命令就结束了。麻烦的地方在"跑起来"之后：
+      <strong>它默认只肯跟自己说话</strong>，而我看不出它到底是用什么在算、为什么第一次响应要等那么久。</p>
+
+    <p>这篇记的是那之后的四件事：让它对外说话、确认它在跑、看懂它在用什么算、以及把那 7 秒钟拆开。</p>
+
+    <h2><span class="h2num">01</span>第一件事：让它监听所有网卡</h2>
+
+    <p>默认情况下，服务只绑定在 <code>127.0.0.1</code>——也就是"只有本机能连"。
+      这台机器上跑得好好的，我在笔记本上 <code>curl</code> 它就是连不上。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>后台启动并监听所有网卡</span></div>
+<pre>nohup env OLLAMA_HOST=0.0.0.0:11434 ollama serve &gt;&gt; /var/log/ollama.log 2&gt;&amp;1 &amp;</pre>
+    </div>
+
+    <p>这一行里有四个东西，缺一个都会出问题：</p>
+
+    <ul>
+      <li><code>nohup</code> —— 让进程脱离终端。不加它，你断开 SSH 的那一刻服务就没了。</li>
+      <li><code>env OLLAMA_HOST=0.0.0.0:11434</code> —— 把监听地址改成<strong>所有网卡</strong>。
+        <code>0.0.0.0</code> 不是某个具体地址，它的意思是"接受来自任何网卡的连接"。
+        这是它的默认值 <code>127.0.0.1</code> 的反面。</li>
+      <li><code>&gt;&gt; /var/log/ollama.log 2&gt;&amp;1</code> —— 标准输出和错误都追加到日志文件。
+        <code>2&gt;&amp;1</code> 是必须的，否则错误信息会被丢掉——
+        而排查问题时，你要找的恰恰是错误信息。</li>
+      <li>末尾的 <code>&amp;</code> —— 放后台，让终端立刻还给你。</li>
+    </ul>
+
+    <h2><span class="h2num">02</span>第二件事：用三个动作确认它活着</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>确认</span></div>
+<pre><span class="c"># 1. 进程在不在</span>
+ps aux | grep ollama
+
+<span class="c"># 2. 日志里最后几行说了什么</span>
+tail -n 5 /var/log/ollama.log
+
+<span class="c"># 3. 接口通不通（注意用局域网地址，不是 localhost）</span>
+curl http://192.168.1.3:11434/api/generate \
+  -d '{"model":"llama3.2","prompt":"Hi","stream":false}'</pre>
+    </div>
+
+    <p>第三个动作有个容易做错的地方：<strong>测试要用局域网 IP，不能用 <code>localhost</code></strong>。
+      在 <code>localhost</code> 上测通，只证明"它自己认识自己"，
+      完全不能说明外部能不能连上。</p>
+
+    <h2><span class="h2num">03</span>第三件事：它在用什么算</h2>
+
+    <p>启动日志把硬件情况交代得很清楚：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>/var/log/ollama.log</span></div>
+<pre>level=INFO msg="discovering available GPUs..."
+level=INFO msg="model list cache hydration complete" models=1 failures=0 elapsed=10.330729ms
+level=INFO msg="inference compute" id=cpu library=cpu name=cpu total="10.9 GiB" available="6.3 GiB"
+level=INFO msg="vram-based default context" total_vram="0 B" default_num_ctx=4096</pre>
+    </div>
+
+    <p>逐行读：</p>
+
+    <ul>
+      <li><strong>第一行说它在找 GPU。</strong>后面没有出现任何 GPU 的名字，
+        而 <code>inference compute</code> 那行里 <code>id=cpu</code>、<code>library=cpu</code>——
+        意思很明确：<em>这台机器上没有它能用的加速设备，全部落到 CPU 上算</em>。</li>
+      <li><strong><code>total="10.9 GiB" available="6.3 GiB"</code></strong> 是内存的账。
+        这是最关键的一行：模型必须装进 <strong>6.3 GiB</strong> 这个可用额度里，
+        而不是标称的 10.9。已经跑着别的服务时，这个数会更小。</li>
+      <li><strong><code>total_vram="0 B"</code> + <code>default_num_ctx=4096</code></strong> 说明因为显存为零，
+        上下文长度被按 CPU 的默认值设成了 4096 个 token。想让它记住更长的对话，得手动调——
+        代价是内存占用同步上升。</li>
+    </ul>
+
+    <h2><span class="h2num">04</span>第四件事：那 7 秒花在哪了</h2>
+
+    <p>上面那条 <code>curl</code> 第一次跑完，返回的 JSON 里带着一组 <code>duration</code> 字段。
+      它们都是以<strong>纳秒</strong>为单位的整数，我把它换算成秒排了一遍：</p>
+
+    <table>
+      <thead>
+        <tr><th>字段</th><th>纳秒</th><th>秒</th><th>占比</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>load_duration</code></td><td>6 089 822 341</td><td>6.09 s</td><td>85.3%</td></tr>
+        <tr><td><code>prompt_eval_duration</code></td><td>522 756 000</td><td>0.52 s</td><td>7.3%</td></tr>
+        <tr><td><code>eval_duration</code></td><td>510 453 000</td><td>0.51 s</td><td>7.2%</td></tr>
+        <tr><td><code>total_duration</code></td><td>7 134 792 185</td><td>7.13 s</td><td>100%</td></tr>
+      </tbody>
+    </table>
+
+    <p><mark>7.13 秒里，6.09 秒花在"把模型加载进内存"上，真正算的部分只占了 1 秒。</mark></p>
+
+    <p>而且这 1 秒还能再拆：<code>prompt_eval</code> 是处理我那句 "Hi" 的时间（0.52 秒），
+      <code>eval</code> 是生成回答的时间（0.51 秒）。生成的量是 <code>eval_count: 8</code>——
+      八个 token。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>算一下出词速度</span></div>
+<pre>8 token ÷ 0.51 s ≈ 15.7 token/s</pre>
+    </div>
+
+    <p>15.7 token/秒，纯 CPU。这个速度用于生成短句是可以接受的——
+      它大概相当于人快速阅读的速度，等一两秒出半句话，感觉不算煎熬。
+      但用来写长文就会很难受：一千个 token 要等一分多钟。</p>
+
+    <p>更重要的是那个 6.09 秒。它<strong>不代表这台机器算得慢</strong>，
+      它代表"模型还没进内存"。所以同一台机器上第二次问同样的问题，
+      只要模型还在内存里，响应会明显快得多——因为最大的一块开销被跳过了。</p>
+
+    <p>这也是为什么"用同一句话前后测两次"这件事很重要：
+      第一次的数字看着吓人，但它测的是加载，不是推理。</p>
+
+    <h2><span class="h2num">05</span>停掉它</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>停止与确认</span></div>
+<pre>pkill -f "ollama serve"
+ps aux | grep "ollama serve" | grep -v grep</pre>
+    </div>
+
+    <p><code>-f</code> 让 pkill 匹配完整的命令行而不只是进程名，
+      这样能准确命中带参数启动的那个进程。
+      第二行的 <code>grep -v grep</code> 是把它自己的搜索进程过滤掉，
+      否则你永远会看到"似乎还有一个在跑"。</p>
+
+    <blockquote>
+      <p>这台机器上跑着模型、Agent、还有别的服务，内存的 <code>available</code> 是共享的。
+        所以"能不能跑某个模型"这个问题，答案不取决于模型有多大，
+        而取决于<em>此刻还剩多少可用内存</em>——它每天都不一样。</p>
+    </blockquote>
+
+    <h2><span class="h2num">06</span>留下四个可以带走的东西</h2>
+
+    <ol>
+      <li><strong>本地服务要对外，先看它绑在哪。</strong>
+        <code>127.0.0.1</code> 和 <code>0.0.0.0</code> 只差几个字符，一个只能自己用，一个全网可达。</li>
+      <li><strong>测连通性要用真实 IP，不要用 localhost。</strong>
+        这两个测试回答的是不同的问题。</li>
+      <li><strong><code>available</code> 才是能用的内存，不是 <code>total</code>。</strong>
+        决定模型能不能加载的是前者，而且它随时在变。</li>
+      <li><strong>看耗时不要只看总数，要拆开。</strong>
+        加载、处理输入、生成输出是三笔独立的账。
+        混在一起看，你会误以为"这台机器算得慢"，而实际上它只是"还没醒"。</li>
+    </ol>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月 31 日的便签记录。日志与 JSON 返回值为当时的真实输出，
+        机器为无独立显卡的 aarch64 设备（可用内存 6.3 GiB）。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>新增第 04 节。原始便签里只是把启动命令和几条验证命令罗列在一起，
+        没有解释那些 duration 字段——而它们才是"为什么第一次这么慢"的答案。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>内容对了，为什么没送到</title>
+      <link>https://margin.pages.dev/posts/qos-tf-static.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/qos-tf-static.html</guid>
+      <pubDate>Sun, 30 Aug 2026 00:00:00 +0800</pubDate>
+      <category>通信</category>
+      <description>transient_local 遇上 volatile：消息就躺在话题里，订阅者却主动拒绝接收。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/qos-tf-static.html">内容对了，为什么没送到</a> · 2026.08.30</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">RViz 里激光点云画得好好的，我随手把那个终端关掉了，点云还在。</p>
+
+    <p>这不对。RViz 里的东西都有来源：要么来自某个正在跑的节点，要么来自它自己缓存的一份。
+      我把发布者杀了，画面却纹丝不动——说明我看到的那份数据，根本不是我以为的那个发布者给的。</p>
+
+    <p>顺着这条线查下去，我撞上了 ROS 2 里最容易忽略、也最容易把人困住的一块：
+      <strong>QoS（服务质量策略）</strong>。它造成的问题有个共同特征——
+      <mark>数据明明在那儿，你的订阅者就是收不到，而且全程几乎不报错</mark>。</p>
+
+    <h2><span class="h2num">01</span>先出现的怪事：能看到，却用不上</h2>
+
+    <p>更早的时候就有征兆。RViz 一直报某个 frame 不存在，我以为是 TF 树没建好，
+      于是直接去翻话题：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>终端</span></div>
+<pre>$ ros2 topic echo /tf_static --once
+transforms:
+- header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: base_link
+  child_frame_id: laser_frame
+  transform:
+    translation: {x: 0.0, y: 0.0, z: 0.08}
+    rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+---</pre>
+    </div>
+
+    <p>内容完全正确：<code>base_link</code> → <code>laser_frame</code>，z 方向抬高 8 厘米，
+      和我需要的变换一模一样。话题里<strong>确实有这条消息</strong>。</p>
+
+    <p>但 RViz 收不到，<code>tf2_echo base_link laser_frame</code> 也拿不到。
+      所以问题不是「数据对不对」，而是「数据有没有被送到」。</p>
+
+    <h2><span class="h2num">02</span>答案藏在一行被我跳过的 WARN 里</h2>
+
+    <p>回头翻启动日志，找到了它：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>rviz2 启动日志</span></div>
+<pre>[WARN] [...] New publisher discovered on topic '/tf_static',
+       offering incompatible QoS. No messages will be sent to it.
+       Last incompatible policy: DURABILITY_QOS_POLICY</pre>
+    </div>
+
+    <p>这行警告说得很直白，只是我当时没读懂：「发现了一个新的发布者，但它提供的 QoS 不兼容，
+      <strong>不会向它发送任何消息</strong>。不匹配的策略是 DURABILITY。」</p>
+
+    <p>这里的措辞有点绕，但结果是清楚的：RViz 不是「没收到」，而是<strong>主动拒绝接收</strong>。</p>
+
+    <h2><span class="h2num">03</span>Durability：这两台设备对「历史」的看法不同</h2>
+
+    <p>Durability（持久性）解决的是一个问题：<em>订阅者来晚了，还能不能拿到之前发过的消息？</em></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>策略</th>
+          <th>含义</th>
+          <th>谁在用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>volatile</code></td>
+          <td>只收「我订阅之后」发出的消息，不看历史</td>
+          <td>RViz、tf2_echo 的默认值</td>
+        </tr>
+        <tr>
+          <td><code>transient_local</code></td>
+          <td>消息会「存」在话题里，后来的订阅者能补收到</td>
+          <td>我那个雷达驱动发布的 <code>/tf_static</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>ROS 2 的规则很硬：<strong>发布者和订阅者的 Durability 必须完全一致，才允许通信</strong>。
+      一深一浅，就不匹配，消息根本不会发出去。所以哪怕话题里躺着那条变换，
+      RViz 的 TF 缓存里也永远不会有它。</p>
+
+    <h2><span class="h2num">04</span>第二个因素：发布者「打一枪就走了」</h2>
+
+    <p>只到这一步还不够——我又去量了一下那个话题的发布频率，发现了第二件事：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>频率与时间戳</span></div>
+<pre>average rate: 0.35        <span class="c"># 大约 3 秒一次</span>
+stamp: sec: 0, nanosec: 0 <span class="c"># 时间戳是 0</span></pre>
+    </div>
+
+    <p>0.35 Hz，而且时间戳是 <code>0</code>。这两个特征凑在一起通常意味着：
+      发布者并不是一个常驻节点，而是<strong>某个驱动在启动时发了一次静态变换，然后就退出了</strong>
+      （或者进了休眠）。</p>
+
+    <p>静态变换按定义只发一次就够了——前提是订阅者用 <code>transient_local</code> 能补收到。
+      可一旦遇到 <code>volatile</code> 的订阅者，这次发布就彻底错过了：<em>发布时你还没来，你来时它已经走了</em>。</p>
+
+    <p>而 RViz 是在驱动之后才启动的。两件事凑齐，就成了死局。</p>
+
+    <h2><span class="h2num">05</span>为什么手敲一行命令就好了</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>手动发布静态变换</span></div>
+<pre>ros2 run tf2_ros static_transform_publisher \
+  --x 0 --y 0 --z 0.08 --roll 0 --pitch 0 --yaw 0 \
+  --frame-id base_link --child-frame-id laser_frame</pre>
+    </div>
+
+    <p>这行命令一跑，RViz 立刻正常。它成功的原因，正好是前面两个失败原因的镜像：</p>
+
+    <ul>
+      <li><strong>它用默认的 <code>volatile</code> 策略</strong>——和 RViz、<code>tf2_echo</code> 完全匹配，
+        「语言」相通，消息才发得出去。</li>
+      <li><strong>它一直在运行</strong>，大约每秒重发一次。无论 RViz 什么时候打开，都能等到下一次推送，
+        不存在「来晚了」的问题。</li>
+    </ul>
+
+    <p>把两条路并排放一下，问题就非常清楚了：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>驱动发的 <code>/tf_static</code></th>
+          <th>手动命令</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Durability</td>
+          <td><code>transient_local</code> → 不匹配</td>
+          <td><code>volatile</code> → 匹配</td>
+        </tr>
+        <tr>
+          <td>发布行为</td>
+          <td>0.35 Hz，发完就走</td>
+          <td>持续约 1 Hz</td>
+        </tr>
+        <tr>
+          <td>RViz 能收到吗</td>
+          <td>拒绝接收</td>
+          <td>正常接收</td>
+        </tr>
+        <tr>
+          <td>结果</td>
+          <td>frame does not exist</td>
+          <td>点云正常显示</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="h2num">06</span>如果一定要用原来那个发布者</h2>
+
+    <p>把订阅端的 QoS 调成 <code>transient_local</code>，就能和它对上：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>让订阅端去迁就</span></div>
+<pre>ros2 run tf2_ros tf2_echo base_link laser_frame --qos-durability transient_local</pre>
+    </div>
+
+    <p>RViz 也可以在话题配置里把 Durability 改掉。但如果那个发布者是别人写好的驱动，
+      改自己这边更省事。反过来，如果两边都能改，
+      <strong>标准做法还是用 <code>static_transform_publisher</code> 持续发布</strong>——
+      它对任何订阅者都友好，不要求对方懂你的策略。</p>
+
+    <blockquote>
+      <p>一个判断规则：静态变换只用发一次，是建立在「订阅者能补收到历史」这个前提上的。
+        只要链路上有任何一个订阅者是 <code>volatile</code>，这个前提就不成立。
+        与其去猜别人用什么策略，不如老老实实持续发。</p>
+    </blockquote>
+
+    <h2><span class="h2num">07</span>这件事教我的</h2>
+
+    <ul>
+      <li><strong>「话题里有消息」和「我收得到」是两件事。</strong>
+        <code>ros2 topic echo</code> 能用，只证明<em>它</em>能和发布者对上，
+        不证明 RViz 或你的代码也能。这是我当时最想不通的地方。</li>
+      <li><strong>WARN 要读，尤其是提到 QoS 的。</strong>
+        那行 <code>offering incompatible QoS</code> 安静地躺在启动日志里，
+        它其实已经把答案说完了。我跳过了它，于是多花了几个小时。</li>
+      <li><strong>时间戳是 0 的静态变换，是个信号。</strong>
+        它说明这条消息被设计成「发一次就够」。看到这种设计，
+        就要立刻问一句：那我的订阅者能不能补收到？</li>
+    </ul>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月 30 日的排查记录。当时的现象是停掉手动发布的 TF 之后，
+        点云画面依旧存在——顺着这条线才把 QoS 不匹配的问题挖出来。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>把「0.35 Hz + 时间戳为 0」这两条线索单独提出来讲。原始笔记里它们混在排查过程里，
+        其实它们是判断「这个发布者会不会自己消失」最快的依据。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>Wi-Fi 上跑 ROS 2，是一种什么体验</title>
+      <link>https://margin.pages.dev/posts/wifi-ros2-latency.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/wifi-ros2-latency.html</guid>
+      <pubDate>Thu, 27 Aug 2026 00:00:00 +0800</pubDate>
+      <category>通信</category>
+      <description>局域网里 100 ms 的 ping 不正常。我用 iperf、信道扫描和一根网线，把这笔账算清楚了——大部分。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/wifi-ros2-latency.html">Wi-Fi 上跑 ROS 2，是一种什么体验</a> · 2026.08.27</em></p>
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">先说结论，省得你读到最后才发现这篇没有奇迹：我把延迟从 100 ms 压到了 12 ms，
+          但没能压到 5 ms 以下。剩下的那部分，我至今不知道是什么，我把已知的全部写在这里。</p>
+
+        <p>事情起因于一个很具体的数字。我的 ESP32 通过 micro-ROS 往 Agent 发 <code>sensor_msgs/LaserScan</code>，
+          实测可靠吞吐只有约 1 Hz。雷达本身是 5 Hz 的，也就是说有 80% 的数据在路上丢了。
+          查吞吐之前，我先查了最底层的东西：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>agent$ ping 192.168.1.11 · 100 包</span></div>
+<pre>100 packets transmitted, 100 received, 0% packet loss
+rtt min/avg/max/mdev = <span class="n">11.402</span>/<span class="n">98.713</span>/<span class="n">341.228</span>/<span class="n">62.019</span> ms</pre>
+        </div>
+
+        <p>零丢包，平均 98.7 ms，最大 341 ms，标准差 62 ms。这三个数字里，<strong>最要命的不是平均值，是标准差</strong>。
+          平均 100 ms 的链路勉强能干活；抖动 62 ms 的链路没法干活，因为你不敢设超时。</p>
+
+        <h2><span class="h2num">01</span>先分清：是 Wi-Fi 还是 ROS？</h2>
+
+        <p>这是第一个岔路口。我用一个很土但有效的办法：跑纯 ping 的同时跑 ROS 话题，看谁先崩。</p>
+
+        <ul>
+          <li>不跑 ROS，只 ping：平均 96 ms。</li>
+          <li>跑 ROS，同时 ping：平均 101 ms，话题频率 1 Hz。</li>
+          <li>只跑 ROS，用 <code>ros2 topic hz</code> 看：1.02 Hz。</li>
+        </ul>
+
+        <p>ping 基本没变化，说明 DDS 不是延迟的制造者，它只是<strong>受害者</strong>——
+          eProsima 默认的可靠传输在乱序和抖动面前会疯狂重传，重传又制造更多抖动，于是吞吐塌方。</p>
+
+        <blockquote>
+          <p>把问题从"A 和 B 之间有问题"缩小到"A 和 B 之间的链路本身有问题"，这一步省了我至少半天。
+            很多人一上来就调 DDS 的 QoS 参数，那是给漏水的管子缠胶带。</p>
+        </blockquote>
+
+        <h2><span class="h2num">02</span>iperf：吞吐其实不差</h2>
+
+        <p>延迟高，通常伴随吞吐低。但测出来不是这样：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>iperf3 · TCP · 60 秒</span></div>
+<pre>[ ID] Interval           Transfer     Bitrate         Retr
+[  5] 0.00-60.00 sec     412 MBytes   <span class="n">57.6</span> Mbits/sec   <span class="n">189</span>   sender
+[  5] 0.00-60.00 sec     411 MBytes   <span class="n">57.4</span> Mbits/sec          receiver</pre>
+        </div>
+
+        <p>57 Mbps，对 2.4 GHz 单流来说是很正常的成绩。189 次重传不算多。
+          <mark>吞吐正常、延迟爆炸，这种组合几乎总是指向缓冲（buffer）</mark>——
+          某个环节在排队，把延迟堆了起来。这就是所谓的 bufferbloat。</p>
+
+        <figure class="figure">
+          <svg viewBox="0 0 800 320" role="img" aria-label="延迟分布直方图">
+            <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".6" style="fill:var(--text-3)">
+              <text x="40" y="34">延迟分布 · 500 次 ping</text>
+            </g>
+            <path d="M40 274 H764" stroke-width="1.4" fill="none" style="stroke:var(--text-3)"/>
+            <g fill-opacity=".85" style="fill:var(--amber)">
+              <rect x="60"  y="196" width="34" height="78"/>
+              <rect x="100" y="150" width="34" height="124"/>
+              <rect x="140" y="88"  width="34" height="186"/>
+              <rect x="180" y="60"  width="34" height="214"/>
+              <rect x="220" y="104" width="34" height="170"/>
+              <rect x="260" y="168" width="34" height="106"/>
+              <rect x="300" y="210" width="34" height="64"/>
+              <rect x="340" y="238" width="34" height="36"/>
+              <rect x="380" y="252" width="34" height="22"/>
+              <rect x="420" y="260" width="34" height="14"/>
+            </g>
+            <g fill-opacity=".45" style="fill:var(--text-3)">
+              <rect x="460" y="264" width="34" height="10"/>
+              <rect x="500" y="268" width="34" height="6"/>
+              <rect x="540" y="270" width="34" height="4"/>
+              <rect x="580" y="271" width="34" height="3"/>
+              <rect x="620" y="272" width="34" height="2"/>
+              <rect x="660" y="272" width="34" height="2"/>
+              <rect x="700" y="273" width="34" height="1"/>
+            </g>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".55" style="fill:var(--text-3)">
+              <text x="52"  y="292">10</text>
+              <text x="132" y="292">50</text>
+              <text x="212" y="292">90</text>
+              <text x="292" y="292">130</text>
+              <text x="372" y="292">170</text>
+              <text x="452" y="292">210</text>
+              <text x="532" y="292">250</text>
+              <text x="612" y="292">290</text>
+              <text x="692" y="292">330 ms</text>
+            </g>
+            <g stroke-width="1.4" fill="none" stroke-dasharray="5 4" style="stroke:var(--amber)">
+              <path d="M150 60 V278"/>
+            </g>
+            <text x="156" y="52" font-family="ui-monospace,Consolas,monospace" font-size="11" style="fill:var(--amber)">众数 ≈ 65 ms</text>
+          </svg>
+          <figcaption><b>图 01</b> — 延迟不是均匀分布，主峰在 60–90 ms，另有一条拖到 330 ms 的长尾。长尾才是致命的部分。</figcaption>
+        </figure>
+
+        <h2><span class="h2num">03</span>三个嫌疑，逐个排除</h2>
+
+        <h3>嫌疑一：信道拥塞</h3>
+        <p>扫下来 2.4 GHz 一共 13 个网络，1、6、11 三个互不重叠的信道全被占，我所在的是 6，
+          上面有 5 个 AP。这确实不好，但换个场景验证一下就知道分量：凌晨三点复测，
+          平均延迟从 98 ms 降到 71 ms。有改善，但不是全部。</p>
+
+        <h3>嫌疑二：ESP32 的 Wi-Fi 省电</h3>
+        <p>默认的 <code>WIFI_PS_MIN_MODEM</code> 会让 RF 周期性休眠，代价就是延迟和抖动。
+          我改成 <code>WIFI_PS_NONE</code>：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>firmware · 改后复测</span></div>
+<pre><span class="c">// esp_wifi_set_ps(WIFI_PS_NONE);  // 关掉 modem sleep</span>
+100 packets transmitted, 100 received
+rtt min/avg/max/mdev = <span class="n">6.118</span>/<span class="n">43.206</span>/<span class="n">188.440</span>/<span class="n">31.507</span> ms</pre>
+        </div>
+
+        <p>平均从 98 ms 掉到 43 ms。<strong>这是单一改动里收益最大的一步</strong>，
+          代价是功耗——电池供电的项目要自己权衡。</p>
+
+        <h3>嫌疑三：Agent 侧的 USB 无线网卡</h3>
+        <p>我的 Agent 主机用的是一块 USB 无线网卡。把它拔掉，改接有线到同一个路由器：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>改有线后 · ESP32 仍走 Wi-Fi</span></div>
+<pre>rtt min/avg/max/mdev = <span class="n">4.902</span>/<span class="n">12.884</span>/<span class="n">51.306</span>/<span class="n">9.774</span> ms</pre>
+        </div>
+
+        <p>12.9 ms。到这里，1 Hz 的吞吐涨到了稳定 5 Hz——正好是雷达的物理频率，
+          也就是说链路不再是瓶颈了。</p>
+
+        <blockquote>
+          <p>原来 100 ms 里，有大约 55 ms 花在 ESP32 的 modem sleep 上，
+            有大约 30 ms 花在 Agent 那块 USB 网卡和它的驱动上，剩下的才是空气里本来该有的时间。</p>
+        </blockquote>
+
+        <h2><span class="h2num">04</span>剩下那部分，我没解决</h2>
+
+        <p>mdev 还有 9.8 ms，最大 51 ms。对大多数应用够用了，但对我要做的实时控制链路不够——
+          舵机闭环时，51 ms 的单次抖动意味着一次明显的过冲。</p>
+
+        <p>我试过但没用的几件事，一并记下来，省得你再走一遍：</p>
+
+        <ul>
+          <li>调 <code>RMW</code> 的 QoS：把 reliability 从 RELIABLE 改成 BEST_EFFORT，吞吐没再涨（本来就已经到物理频率上限了）。</li>
+          <li>改 MTU：从 1500 降到 1200，无变化。局域网不分片，这不是问题所在。</li>
+          <li>绑定信道带宽 20 MHz / 40 MHz：40 MHz 吞吐更好但抖动更差，最后选了 20 MHz。</li>
+          <li>把路由器换成另一个品牌：平均降到 9 ms，但 mdev 依然有 7 ms。说明<strong>空气里的时间不是零</strong>，
+            2.4 GHz 的 CSMA/CA 天生就有 contention 开销。</li>
+        </ul>
+
+        <p>所以这篇的结尾是开放的：我能把 Wi-Fi 上跑 ROS 2 做到"够用"，但做不到"确定"。
+          如果你的项目对延迟有硬要求，我的建议很朴素——<strong>能走线就走线</strong>。
+          我最后的控制链路改成了串口，把 Wi-Fi 留给那些不关心 50 ms 的数据。</p>
+
+        <p>工具本身没有错，错的是把它用在它不擅长的地方。这句话我大概每年都要重新学一次。</p>
+
+        <dl class="revision">
+          <dt>2026.09.02 补充</dt>
+          <dd>有读者问为什么不上 5 GHz。ESP32-WROOM 只支持 2.4 GHz，这个型号没得选；ESP32-C5 / S3 的部分型号才支持 5 GHz。</dd>
+          <dt>2026.08.28 修订</dt>
+          <dd>初稿把 43 ms 写成"最终值"，那是只改了省电模式的中间结果。加上有线对比后应为 12.9 ms，已更正。</dd>
+        </dl>
+      </div>
+
+      
+    </div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>在没有 systemd 的环境里让服务活下来</title>
+      <link>https://margin.pages.dev/posts/no-systemd-autostart.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/no-systemd-autostart.html</guid>
+      <pubDate>Sat, 15 Aug 2026 00:00:00 +0800</pubDate>
+      <category>环境</category>
+      <description>把启动挂到登录 shell 上，以及 WSL2 里 DISPLAY 为什么会填成一个公网 DNS 地址。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/no-systemd-autostart.html">在没有 systemd 的环境里让服务活下来</a> · 2026.08.15</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">在一台 Android 手机里跑的 Ubuntu 上，我想让 SSH 服务跟着开机自动起来。
+      于是我敲下那句在服务器上敲了无数次的命令：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>习惯性尝试</span></div>
+<pre>$ systemctl enable ssh
+System has not been booted with systemd as init system (PID 1). Can't operate.</pre>
+    </div>
+
+    <p>这台 Ubuntu 跑在 PRoot 里。PRoot 不是一个真正的容器——它更像一个
+      <strong>把系统调用翻译过去的用户态工具</strong>，没有内核隔离，也没有 PID 1。
+      既然没有 init 系统，就不会有人来读你的「开机自启清单」。</p>
+
+    <p>所以问题变成了：<em>在一个没有 init 的环境里，「开机」这件事该挂在哪儿？</em></p>
+
+    <h2><span class="h2num">01</span>把启动挂到「你进来」的那一刻</h2>
+
+    <p>没有 init，但有别的东西一定会被执行：<strong>登录 shell 的启动脚本</strong>。
+      在 PRoot 这种环境里，你每次打开终端（或者通过 SSH 连进来），
+      <code>~/.bashrc</code> 都会被读取一遍。</p>
+
+    <p>把它当成一个「开机钩子」用就行了：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>写入 ~/.bashrc</span></div>
+<pre>echo 'if ! pgrep -x "sshd" &gt; /dev/null; then /usr/sbin/sshd -o Port=2222 -o UsePAM=no -o PermitRootLogin=yes -o PasswordAuthentication=yes &amp; fi' &gt;&gt; ~/.bashrc</pre>
+    </div>
+
+    <p>这行命令有点长，拆开看就三件事：</p>
+
+    <ul>
+      <li><code>pgrep -x "sshd"</code> —— 先问一句「sshd 已经在跑了吗」。
+        <strong>这是幂等性的来源</strong>：如果每次开终端都无条件启动一次，
+        第二次就会因为端口被占用而失败，屏幕上一串报错。</li>
+      <li>只有没在跑的时候，才执行后面的启动命令。注意这里是 <code>sshd</code>
+        而不是 <code>service ssh start</code>——既然没有 init，就绕过它，直接叫二进制。</li>
+      <li>结尾的 <code>&amp;</code> 让 sshd 转到后台。少了它，你的终端会被 sshd 占住，
+        看起来像卡死了。</li>
+    </ul>
+
+    <p>验证一下写进去了没有：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>确认</span></div>
+<pre>$ tail -n 3 ~/.bashrc</pre>
+    </div>
+
+    <h2><span class="h2num">02</span>这个方案的边界，得说清楚</h2>
+
+    <p>它不是万能的。由于钩子挂在「登录 shell」上，启动时机取决于<strong>你什么时候进这个环境</strong>：</p>
+
+    <ul>
+      <li>你打开 App 进入 Ubuntu → SSH 跟着起来，正常。</li>
+      <li>手机整个关机再开机 → 你得先手动打开 App 进一次 Ubuntu，SSH 才会起来。</li>
+    </ul>
+
+    <p>也就是说，它解决的是「不用每次手敲那串长命令」，不是「真正意义上的开机自启」。
+      在 PRoot 这种没有内核支持的环境里，后者本来就做不到——不丢人，知道边界就行。</p>
+
+    <blockquote>
+      <p>由此得到一个可以复用的判断：<strong>没有 init 系统时，把「启动」挂到任何一个必然发生的生命周期事件上</strong>——
+        登录 shell、cron 的 <code>@reboot</code>、supervisor，或者干脆在你自己的主程序里守护。
+        不要试图安装一个 systemd，那是往错误的方向使劲。</p>
+    </blockquote>
+
+    <h2><span class="h2num">03</span>顺带说说同一类环境里的另一个坑：DISPLAY</h2>
+
+    <p>在 WSL2 里跑图形程序（RViz、turtlesim）时，会遇到一模一样性质的问题：
+      Linux 侧的 GUI 程序需要一个 <code>DISPLAY</code> 变量，告诉它「把窗口画到哪台机器的屏幕上」。</p>
+
+    <p>这个变量的正确值，就是<strong>Windows 主机的 IP</strong> 加上 <code>:0</code>。
+      难点在于怎么把这个 IP 拿到——WSL2 每次重启，这个地址都会变。</p>
+
+    <p>最可靠的取法是<strong>默认网关</strong>，因为 WSL2 的默认网关就是 Windows 主机：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>取 IP 并设置</span></div>
+<pre><span class="c"># 方法一：默认网关（最可靠）</span>
+export DISPLAY=$(ip route | grep default | awk '{print $3}'):0
+
+<span class="c"># 方法二：如果上面取到的是空，用 resolv.conf 的第二个 nameserver</span>
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | sed -n '2p' | awk '{print $2}'):0</pre>
+    </div>
+
+    <p>为什么强调「第二个」？因为 <code>/etc/resolv.conf</code> 里通常有两个以上的 nameserver，
+      而<strong>第一个往往是 DNS 服务器，不是 Windows 主机</strong>。
+      曾经有人（在我之前）套用网上的命令取了第一个，结果 <code>DISPLAY</code> 变成了
+      <code>223.5.5.5:0</code>——一个公网 DNS 的地址。程序当然连不上，但它不会告诉你「你填错 IP 了」，
+      只会沉默或者报一个看不懂的 X11 错误。</p>
+
+    <p>所以设置完一定要验证一眼：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>验证</span></div>
+<pre>$ echo $DISPLAY
+172.27.192.1:0          <span class="c"># 对：私网地址 + :0</span>
+223.5.5.5:0             <span class="c"># 错：这是 DNS</span>
+:0                      <span class="c"># 错：空变量</span></pre>
+    </div>
+
+    <p>要让它每次开终端都自动生效，同样是往 <code>.bashrc</code> 里塞一行。
+      这里有个转义上的小麻烦——<code>awk</code> 里的 <code>$3</code> 会被 shell 提前展开，
+      所以写成外面双引号、里面转义的组合：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>永久生效</span></div>
+<pre>echo 'export DISPLAY=$(ip route | grep default | awk "{print \$3}"):0' &gt;&gt; ~/.bashrc
+source ~/.bashrc</pre>
+    </div>
+
+    <p>如果 WSL 走的是无线网卡、默认网关这条路取不到，也可以直接写死 Windows 的局域网 IP，
+      比如 <code>export DISPLAY=192.168.1.5:0</code>——
+      代价是 Windows 换网络之后要手动改。</p>
+
+    <h2><span class="h2num">04</span>两个坑，一条共同的线</h2>
+
+    <p>把这两件事放在一起看，它们是同一个问题：</p>
+
+    <p><strong>Windows 侧和 Linux 侧对「环境」的理解不一样。</strong>
+      PRoot 里没有 init，所以没有「开机」这个概念可供挂钩；
+      WSL2 里的网络是虚拟化的，所以主机地址需要推导而不是写死。</p>
+
+    <p>遇到这类问题的排查顺序，我现在会这么做：</p>
+
+    <ol>
+      <li>先问<strong>这个环境里到底有什么</strong>——有 init 吗？网络是谁在管？IP 从哪来？</li>
+      <li>再找<strong>一个一定会发生的事件</strong>当挂载点（登录、重启、进程启动）。</li>
+      <li>最后<strong>把结果打印出来验证</strong>，不要假设它生效了。上面 <code>echo $DISPLAY</code>
+        那三行对比，就是这一步的模板。</li>
+    </ol>
+
+    <p>第三步尤其重要。这两个坑的共同点都是「命令执行成功了，但事情没成」——
+      <code>systemctl</code> 是明确报错的，算好运气；而 <code>DISPLAY</code> 填错了，
+      它一声不吭，你只会看到程序打不开窗口。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月的三段便签记录（PRoot 下的 sshd 自启、WSL2 取主机 IP、图形界面显示问题）。
+        环境各不相同，命令请按自己的发行版和网络情况调整。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>把三段笔记合并时才发现它们的结构是一样的：
+        都是「在不标准的环境里，找一个标准事件当钩子」。这条线比单个命令更值得留下。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>把手机变成 ROS 2 上位机</title>
+      <link>https://margin.pages.dev/posts/phone-as-host.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/phone-as-host.html</guid>
+      <pubDate>Thu, 13 Aug 2026 00:00:00 +0800</pubDate>
+      <category>环境</category>
+      <description>neofetch 的三条线索、三个坑，以及实测出来的 0.5 Hz。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/phone-as-host.html">把手机变成 ROS 2 上位机</a> · 2026.08.13</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">事情起因很简单：我不想每次调试都开电脑。</p>
+
+    <p>车在地板上、雷达在桌角、ESP32 插着充电宝——这套东西要动起来，传统上还需要一台笔记本当上位机，
+      跑 ROS 2、开 Agent、看着话题。而如果上位机能塞进口袋呢？需要的时候掏出来，
+      接个扩展坞，整套系统就活了。</p>
+
+    <p>所以我用一部旧手机试了。这篇记录的是它到底能不能干活，以及过程中撞上的三个坑。</p>
+
+    <h2><span class="h2num">01</span>先搞清楚：这台"Ubuntu"到底是什么</h2>
+
+    <p>第一次登录进去，<code>neofetch</code> 打出来的东西就有点不对劲：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>终端 · neofetch</span></div>
+<pre>OS:        Ubuntu 26.04 LTS (Resolute Raccoon) aarch64
+Kernel:    Linux 5.15.197-gdf5e768acfe9-dirty
+Packages:  2117 (dpkg)
+Shell:     bash 5.3.9
+Terminal:  libproot.so
+CPU:       Cortex-A510+Cortex-A715+Cortex-A710+Cortex-X3 (1+4+3) @ 3.19 GHz
+GPU:       Qualcomm Turnip Adreno (TM) 740 [Integrated]
+Memory:    5.93 GiB / 10.94 GiB (54%)</pre>
+    </div>
+
+    <p>里面有三条线索，拼起来指向同一个结论：</p>
+
+    <ul>
+      <li><strong><code>Terminal: libproot.so</code></strong> —— 这一行最直白。
+        正常的终端会显示 <code>pts/0</code> 或 <code>/dev/tty1</code>，
+        这里显示的是一个动态库的名字。意思是：<em>我没跑在真终端上，而是跑在一个用户态模拟层里</em>。
+        PRoot 就是干这个的——它把系统调用翻译一遍，让一个 ARM64 的 Linux rootfs
+        以为自己在一台独立的机器上，实际上内核是共用的。</li>
+      <li><strong><code>Kernel: 5.15.197-gdf5e768acfe9-dirty</code></strong> —— 这个内核版本号对不上。
+        Ubuntu 26.04 应该配的是 6.x 甚至更新的内核，而 5.15 这个分支是好几年前的 LTS。
+        原因是：这个内核不是 Ubuntu 的，是<strong>宿主机（Android）的内核</strong>被直接借用了。
+        PRoot 不提供内核，它只能复用宿主的内核。</li>
+      <li><strong>CPU 那一行</strong> —— <code>Cortex-A510 + A715 + A710 + X3 (1+4+3)</code>，
+        配合 <code>Adreno 740</code>，这是<strong>手机 SoC</strong> 的典型构成
+        （一颗超大核 + 四颗大核 + 三颗小核），而不是任何 x86 笔记本的形态。
+        10.94 GiB 内存也像是 12 GB 手机的可用部分。</li>
+    </ul>
+
+    <p>所以结论很明确：<mark>这是一台 Android 手机，里面用 PRoot 跑着一个 Ubuntu rootfs</mark>。
+      它不是虚拟机，没有独立内核；它也不是 Docker，没有命名空间隔离。
+      它就是「换了个根目录的一堆进程」。</p>
+
+    <blockquote>
+      <p>这三个线索的排法值得记住：<strong>先看终端类型，再看内核版本，最后看 CPU 布局</strong>。
+        顺序不重要，重要的是——只要其中一条对不上"正常电脑"的样子，你就该怀疑自己在容器里。</p>
+    </blockquote>
+
+    <h2><span class="h2num">02</span>装：aarch64 上装 ROS 2</h2>
+
+    <p>ROS 2 这部分我用了「一键安装」脚本（小鱼的那个），在手机上跑 <code>wget</code> 下载再执行：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>安装 ROS 2</span></div>
+<pre>wget http://fishros.com/install -O fishros &amp;&amp; . fishros</pre>
+    </div>
+
+    <p>aarch64 平台的包是齐的，装完 <code>ros2 --help</code> 能正常输出，说明核心组件都到位了。
+      这一点比预想中顺利——毕竟这几年 ARM64 的服务器和开发板已经很常见，
+      发行版维护者基本都会同步构建。</p>
+
+    <p>真正麻烦的是后面三步，它们都和「这个环境不是一台正常电脑」有关。</p>
+
+    <h2><span class="h2num">03</span>坑一：发行版名字写错了一个字母</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>第一次 source</span></div>
+<pre>bash: /opt/ros/lirical/setup.bash: No such file or directory</pre>
+    </div>
+
+    <p>我把发行版名字拼错了。ROS 2 的发行版是按字母顺序起的（首字母递增），
+      拼写一次错就会得到一个"文件不存在"，而那个报错不会提醒你"名字可能是错的"——
+      它只会说找不到这个路径，让你去怀疑是不是没装成功。</p>
+
+    <p>更快的方法是直接去看目录：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>确认发行版</span></div>
+<pre>ls /opt/ros/</pre>
+    </div>
+
+    <p>里面那个目录名就是你要 <code>source</code> 的东西。<em>别背发行版名字，去看目录</em>——
+      这是我在这种事情上唯一稳定的做法。</p>
+
+    <h2><span class="h2num">04</span>坑二：Agent 编译，和一次"看起来改了其实没改"</h2>
+
+    <p>micro-ROS Agent 需要从源码编译（它不在 apt 里）。在 aarch64 上编译时撞了依赖冲突，
+      我最后记下的解决方案步骤是这样的：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>记录为「强制使用内置 fmt」的那套步骤</span></div>
+<pre>cd ~/microros_ws
+rm -rf build install log
+rm -rf src/micro_ros_setup          <span class="c"># 连克隆下来的源码也删掉重新拉</span>
+
+cd src
+git clone https://github.com/micro-ROS/micro_ros_setup.git
+
+cd ~/microros_ws
+rosdep update
+rosdep install --from-paths src --ignore-src -y
+colcon build
+source install/setup.bash</pre>
+    </div>
+
+    <p>当时我把这套步骤记成了「强制使用内置 fmt」——因为报错指向的是 fmt 库的版本冲突。</p>
+
+    <p>但现在回头读这段记录，我发现一个矛盾：<strong>这套步骤里没有任何一处改到了 fmt 相关的配置</strong>。
+      真正做的事只有一件——<em>把 <code>build</code>、<code>install</code>、<code>log</code> 和一个源码目录全部删掉，重新来一遍</em>。</p>
+
+    <p>所以我现在的判断是：那个报错来自<strong>上一次构建留下的残留</strong>，
+      而不是 fmt 本身需要"强制"。删干净之后重新构建，自然就好了。
+      把它记成"强制内置 fmt"容易让人以为是改了编译选项，其实改的是缓存。</p>
+
+    <blockquote>
+      <p>由此有一条我一直在用的规则：<strong>遇到依赖冲突，先清干净再看一遍报错。</strong>
+        如果清干净之后报错消失了，那说明问题出在残留物上；
+        如果报错还在，你才拿到了一个"干净的复现步骤"。</p>
+    </blockquote>
+
+    <h2><span class="h2num">05</span>坑三：没有 systemd，SSH 得自己叫起来</h2>
+
+    <p>PRoot 里没有 systemd（连 PID 1 都不是它），所以 <code>sudo systemctl start ssh</code> 是无效的。
+      直接叫二进制：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>手动起 sshd</span></div>
+<pre>sudo apt update &amp;&amp; sudo apt install openssh-server -y
+
+sudo mkdir -p /var/run/sshd
+sudo /usr/sbin/sshd -o Port=2222 -o UsePAM=no \
+     -o PermitRootLogin=yes -o PasswordAuthentication=yes
+
+ps aux | grep sshd            <span class="c"># 确认起来了</span>
+ip a                          <span class="c"># 查本机 IP</span></pre>
+    </div>
+
+    <p>从电脑上连：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>~/.ssh/config</span></div>
+<pre>Host android-ubuntu
+    HostName 192.168.31.161
+    User root
+    Port 2222
+    ForwardX11 yes
+    ForwardX11Trusted yes</pre>
+    </div>
+
+    <p><code>ForwardX11</code> 那两行是为了传图形界面——手机上跑 RViz 不现实，
+      但可以通过 X11 转发把窗口丢到电脑屏幕上显示。
+      顺手把这段启动命令写进 <code>~/.bashrc</code>，就变成"每次进去自动起 SSH"了。</p>
+
+    <h2><span class="h2num">06</span>跑起来是什么样</h2>
+
+    <p>Agent 启动，ESP32 连上，会话建立的日志和在任何一台电脑上跑没有任何区别：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>Agent · 手机侧</span></div>
+<pre>info | UDPv4AgentLinux.cpp | init              | running...          | port: 8888
+info | Root.cpp            | create_client     | create              | client_key: 0x296A6185
+info | SessionManager.hpp  | establish_session | session established | address: 192.168.31.20:47138
+info | ProxyClient.cpp     | create_participant| participant created | participant_id: 0x000(1)
+info | ProxyClient.cpp     | create_topic      | topic created       | topic_id: 0x000(2)
+info | ProxyClient.cpp     | create_publisher  | publisher created   | publisher_id: 0x000(3)
+info | ProxyClient.cpp     | create_subscriber | subscriber created  | subscriber_id: 0x000(4)
+info | ProxyClient.cpp     | create_datareader | datareader created  | datareader_id: 0x000(6)</pre>
+    </div>
+
+    <p>数据也是通的：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>终端 · 手机侧</span></div>
+<pre>root@Ubuntu:~# ros2 topic echo /robot/ping
+data: ping from ESP32
+---
+data: ping from ESP32
+---
+root@Ubuntu:~# ros2 topic pub /robot/pong std_msgs/String "data: 'hello from PC'" --once
+publishing #1: std_msgs.msg.String(data='hello from PC')</pre>
+    </div>
+
+    <p>但有一个细节值得单独说：<code>ros2 topic list</code> 的输出是这样的——</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>ros2 topic list</span></div>
+<pre>/parameter_events
+/rosout</pre>
+    </div>
+
+    <p><strong>ESP32 那边的话题一个都没出现</strong>，可上面 <code>echo</code> 明明收到了数据。
+      这不是故障：micro-ROS 的话题挂在 Agent 的会话里，而 <code>topic list</code> 依赖 DDS 的发现机制，
+      当某个话题只有订阅端、没有发布者时，被发现的时间会延迟，甚至暂时不列出。
+      用 <code>ros2 topic pub</code> 真的发一条，或者直接 <code>echo</code>，才是可靠的验证方式。</p>
+
+    <p>频率方面的实测：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>ros2 topic hz /robot/ping</span></div>
+<pre>average rate: 0.533     min: 1.875s max: 1.875s std dev: 0.00000s window: 1
+average rate: 0.676     min: 1.085s max: 1.875s std dev: 0.39528s window: 2
+average rate: 0.756     min: 1.009s max: 1.875s std dev: 0.39180s window: 3
+average rate: 0.674     min: 1.009s max: 1.964s std dev: 0.43831s window: 4</pre>
+    </div>
+
+    <p>大约 0.5 到 0.75 Hz，最慢的间隔接近 2 秒，标准差 0.4 秒左右。也就是说：
+      <mark>链路是通的，但节奏很鬆</mark>。对 ping/pong 测试无所谓，
+      对需要稳定周期的控制指令就不够了——这和我在
+      <a href="https://margin.pages.dev/posts/wifi-ros2-latency.html">另一篇笔记</a>里追过的局域网延迟是同一类问题。</p>
+
+    <h2><span class="h2num">07</span>它的边界在哪</h2>
+
+    <p>用了几天之后，我对这台"口袋上位机"的能力有了比较清楚的边界认知：</p>
+
+    <table>
+      <thead>
+        <tr><th>能做</th><th>不能做</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>跑 Agent、收发话题、<code>ros2 topic</code> 全套命令</td>
+          <td><strong>有线串口</strong>——写这段时我才确认，手机的 USB 口在未 root 的情况下拿不到 <code>/dev/ttyUSB*</code></td>
+        </tr>
+        <tr>
+          <td>SSH 进去当一台无头服务器用</td>
+          <td>RViz 这类图形工具（可以 X11 转发到电脑，但那就不是"便携"了）</td>
+        </tr>
+        <tr>
+          <td>通过 X11 转发显示单个窗口</td>
+          <td>长时间高负载——手机的散热和电池都不是为这个设计的</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>有线串口这一条是最实际的限制。原因不在软件，在于 Android 对 USB 设备的权限控制：
+      没有 root，普通应用拿不到串口设备节点。绕不过去，所以最终只能走 WiFi——
+      而 WiFi 的稳定性又是另一个话题了。</p>
+
+    <h2><span class="h2num">08</span>所以，值不值</h2>
+
+    <p>我的判断是：<strong>作为"随身应急上位机"，值；作为主力开发机，不值。</strong></p>
+
+    <p>值得的地方在于它解决了一个具体问题——当你想在客厅地板上调车、
+      又不想搬电脑的时候，掏出一部手机就够了。整套 ROS 2 环境它跑得动，
+      Agent 能起来，话题能收发，这些已经覆盖了"看一眼数据"的需求。</p>
+
+    <p>不值的地方在于三个结构性限制：没有 systemd（所有服务都要手动管）、
+      没有 USB（只能无线）、没有图形界面（只能远程）。
+      这三条不是配置问题，是 PRoot 这个方案的固有边界。</p>
+
+    <p>写这段的时候我在便签里留了一句话，我觉得它比任何总结都准确：</p>
+
+    <blockquote>
+      <p>「很明显我的上位机不是文档里所说的上位机。小问题，上位机能用就行了嘛。」</p>
+    </blockquote>
+
+    <p>标准意义上的上位机是工控机或者笔记本：有串口、有系统服务、有屏幕。
+      这台手机三条都不满足。但它的确能收发 ROS 2 话题——那就够了。
+      关键是要知道自己在哪个边界之内工作，而不是假装边界不存在。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月 13 日创建、8 月 29 日更新的一段便签，
+        内含当时的终端输出与 Agent 日志原文。设备为一部 PRoot 环境下的 Android 手机。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>重读时改了一处结论：把「强制使用内置 fmt」改成了「先清干净再构建」。
+        原始记录里的步骤和它自己的标题对不上，而真正起作用的显然是清理。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>micro_ros_agent 装不上的三个原因</title>
+      <link>https://margin.pages.dev/posts/micro-ros-agent.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/micro-ros-agent.html</guid>
+      <pubDate>Thu, 13 Aug 2026 00:00:00 +0800</pubDate>
+      <category>通信</category>
+      <description>没有 apt 包、shell 没 source、GitHub 通道被拦——三件事在终端里长得一模一样。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/micro-ros-agent.html">micro_ros_agent 装不上的三个原因</a> · 2026.08.13</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">在一个刚装好的 ROS 2 环境里，我敲下第一句命令：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>第一次尝试</span></div>
+<pre>$ ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
+Package 'micro_ros_agent' not found</pre>
+    </div>
+
+    <p>然后是全盘搜索，结果是空的。这台机器上根本没有这个包，也从来没安装过。</p>
+
+    <p>接下来我花了大概两个小时，把「装上它」这件事做完。真正浪费时间的不是编译，
+      而是三个前置的坑——它们都不会给你明确的提示，只会让你在错误的路上反复尝试。</p>
+
+    <h2><span class="h2num">01</span>原因一：它不在 apt 里</h2>
+
+    <p>最根本的一条：<strong><code>micro_ros_agent</code> 不是 ROS 2 自带的包，官方也不提供 apt 二进制</strong>。
+      你在 <code>apt search ros-humble-*</code> 里翻多久都找不到它。</p>
+
+    <p>原因不难理解：micro-ROS 是给单片机用的，Agent 要跑在哪台主机、连什么传输
+      （UDP、串口、TCP、还是 CAN），取决于你的具体场景。官方把这部分留给你自己编译。</p>
+
+    <p>所以「装它」这件事的本质是：<em>从源码构建一个 ROS 2 功能包</em>。
+      这就注定要走 <code>colcon build</code> 那条路，而不是 <code>apt install</code>。</p>
+
+    <h2><span class="h2num">02</span>原因二：shell 没 source ROS 2</h2>
+
+    <p>第二个坑不会报错，只会让你困惑。我当时的环境里 <code>ROS_DISTRO</code> 是空的：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>前置检查</span></div>
+<pre>$ source /opt/ros/humble/setup.bash
+$ echo $ROS_DISTRO
+humble
+$ ros2 --help            <span class="c"># 能出帮助信息，说明这一步对了</span></pre>
+    </div>
+
+    <p>没 source 的时候，<code>ros2</code> 命令往往还能跑（因为二进制在 PATH 里），
+      但很多环境变量是空的，于是后面 <code>rosdep</code>、<code>colcon</code> 的行为会变得莫名其妙。</p>
+
+    <p>我的做法是直接把这一行写进 <code>~/.bashrc</code>，一劳永逸：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>~/.bashrc</span></div>
+<pre>source /opt/ros/humble/setup.bash</pre>
+    </div>
+
+    <p>注意发行版名字要对上——你装的是 humble 还是 jazzy，看 <code>/opt/ros/</code> 下面那个目录名就知道。</p>
+
+    <h2><span class="h2num">03</span>原因三：克隆失败，而且不告诉为什么</h2>
+
+    <p>第三个坑最有意思：这台机器<strong>访问 GitHub 的下载通道被网络设备拦了</strong>。
+      git 协议、tarball 下载、API 调用全部不通，只有网页能正常打开。</p>
+
+    <p>这种环境的麻烦在于，它不会给你一个「网络被拦截」的错误，而是给你超时、
+      连接重置、或者干脆卡住——你会先怀疑自己打错了命令，然后怀疑 GitHub 挂了。</p>
+
+    <p>后来我用了两种绕法。第一种是浏览器手动下载 zip：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>方式 B：手动下载（网络受限时用）</span></div>
+<pre><span class="c"># 1. 浏览器打开并下载：</span>
+<span class="c">#    https://github.com/micro-ROS/micro_ros_agent/archive/refs/heads/master.zip</span>
+<span class="c"># 2. 把 zip 传到目标机器后：</span>
+mkdir -p ~/microros_ws/src
+cd ~/microros_ws/src
+unzip ~/micro_ros_agent-master.zip
+mv micro_ros_agent-master micro_ros_agent</pre>
+    </div>
+
+    <p>第二种是走镜像加速（可用性随时间变化，不一定每次都灵）：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>方式 C：镜像加速</span></div>
+<pre>curl -L -o agent.zip \
+  "https://ghfast.top/https://github.com/micro-ROS/micro_ros_agent/archive/refs/heads/master.zip"</pre>
+    </div>
+
+    <p>无论用哪种方式，<mark>关键是最后目录结构要长成 <code>~/microros_ws/src/micro_ros_agent/</code></mark>——
+      colcon 认的是这个形状，中间多套一层文件夹它不会报错，只会静默地什么都编译不出来。</p>
+
+    <h2><span class="h2num">04</span>编译</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>构建</span></div>
+<pre>sudo apt-get update
+sudo apt-get install -y git cmake python3-pip python3-rosdep
+sudo rosdep init        <span class="c"># 提示已初始化就跳过</span>
+rosdep update
+
+cd ~/microros_ws
+source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install</pre>
+    </div>
+
+    <p>在 aarch64 上大概要 5 到 15 分钟。中途如果报缺系统库，
+      用 <code>apt-cache search &lt;关键字&gt;</code> 找一下装上去就行，不用慌。</p>
+
+    <p>编译完成后验证，这一步<strong>必须 source 新工作空间</strong>，否则你还是会看到
+      「Package not found」——而且是同一个报错，很容易以为编译白做了：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>验证</span></div>
+<pre>source ~/microros_ws/install/setup.bash
+ros2 pkg list | grep micro_ros_agent     <span class="c"># 能列出来就算成功</span></pre>
+    </div>
+
+    <h2><span class="h2num">05</span>连上之后，才算真正开始</h2>
+
+    <p>启动 Agent：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>启动 Agent</span></div>
+<pre>ros2 run micro_ros_agent micro_ros_agent udp4 -i 192.168.31.100 --port 8888</pre>
+    </div>
+
+    <p>ESP32 那边烧好程序一连上，日志会刷出一长串。这几行是握手成功的标志：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>Agent 日志</span></div>
+<pre>[1786983463.562502] info | UDPv4AgentLinux.cpp | init              | running...            | port: 8888
+[1786983475.555139] info | Root.cpp            | create_client     | create                | client_key: 0x0EA1126F, session_id: 0x81
+[1786983475.555289] info | SessionManager.hpp  | establish_session | session established   | client_key: 0x0EA1126F, address: 10.230.61.237:47138
+[1786983475.628974] info | ProxyClient.cpp     | create_participant| participant created   | client_key: 0x0EA1126F, participant_id: 0x000(1)
+[1786983475.887035] info | ProxyClient.cpp     | create_topic      | topic created         | client_key: 0x0EA1126F, topic_id: 0x000(2)
+[1786983476.033583] info | ProxyClient.cpp     | create_publisher  | publisher created     | client_key: 0x0EA1126F, publisher_id: 0x000(3)
+[1786983476.243162] info | ProxyClient.cpp     | create_datareader | datareader created    | client_key: 0x0EA1126F, datareader_id: 0x000(6)</pre>
+    </div>
+
+    <p>读日志能读出两件事：</p>
+
+    <ul>
+      <li><strong>首次连接花了大约 12 秒</strong>（<code>init</code> 到 <code>create_client</code> 之间），
+        这不是 bug，是 UDP 广播发现机制的正常代价。</li>
+      <li><strong>实体是在 0.7 秒内逐个建起来的</strong>：participant → topic → publisher → subscriber → reader。
+        如果卡在某一行不动了，你就知道是哪个环节没走通。</li>
+    </ul>
+
+    <p>还有一个我当时没在意、后来才觉得可疑的细节：Agent 监听在 <code>192.168.31.100</code>，
+      但会话里记录的客户端地址是 <code>10.230.61.237</code>。<em>两者不在同一网段</em>，
+      说明中间还有一层设备在做地址转换。这类不对称值得记一笔——
+      它常常是「能握手，但数据不稳」的根源。</p>
+
+    <h2><span class="h2num">06</span>握手成功 ≠ 数据流畅</h2>
+
+    <p>看到 <code>session established</code> 时我松了一口气，以为最难的部分过去了。
+      然后我测了一下话题频率：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>ros2 topic hz /robot/ping</span></div>
+<pre>average rate: 0.330
+        min: 3.030s max: 3.030s std dev: 0.00000s window: 1
+average rate: 0.276
+        min: 3.030s max: 4.814s std dev: 0.63409s window: 5
+average rate: 0.448
+        min: 0.027s max: 4.814s std dev: 1.65541s window: 9
+average rate: 0.745
+        min: 0.024s max: 4.814s std dev: 1.29310s window: 22</pre>
+    </div>
+
+    <p>最慢的一次间隔是 4.814 秒，最快 0.024 秒，标准差一度到 1.65 秒。
+      也就是说：连接是通的，消息也确实在到达，但<strong>节奏完全不可控</strong>。</p>
+
+    <p>对 ping/pong 这种测试无所谓，对控制指令就很致命了。
+      这份输出是我后来去查局域网延迟的起点——那次排查写在了
+      <a href="https://margin.pages.dev/posts/wifi-ros2-latency.html">另一篇笔记</a>里。</p>
+
+    <h2><span class="h2num">07</span>一张排查表</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>现象</th>
+          <th>先查什么</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>ros2 run</code> 报 Package not found</td>
+          <td>是不是没 <code>source ~/microros_ws/install/setup.bash</code>？编译真的成功了吗？</td>
+        </tr>
+        <tr>
+          <td>clone 卡住或超时</td>
+          <td>换浏览器手动下载 zip，或走镜像加速</td>
+        </tr>
+        <tr>
+          <td>colcon 编译 0 个包</td>
+          <td>目录层级对不对？（必须是 <code>src/micro_ros_agent/package.xml</code>）</td>
+        </tr>
+        <tr>
+          <td>Agent 起来了但 ESP32 连不上</td>
+          <td>防火墙放行 UDP 端口；确认 <code>-i</code> 绑的是本机真实 IP</td>
+        </tr>
+        <tr>
+          <td>端口被占用</td>
+          <td><code>ros2 daemon stop</code>，或者换端口（两边要一致）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="h2num">08</span>一句话总结</h2>
+
+    <p>装 micro-ROS Agent 的难点不在编译，在<strong>先确认你面对的是哪一类问题</strong>：
+      是「包不存在」（要编译），是「环境没准备好」（要 source），
+      还是「源码拿不到」（要绕网络）。这三件事的解法完全不同，
+      但它们在终端里长得一模一样——都是某句命令没反应。</p>
+
+    <p>分清楚了，剩下的事情二十分钟就能做完。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月的便签记录，日志为当时的真实输出（ROS 2 / Ubuntu on aarch64）。
+        系统版本与包名请按自己的环境替换。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>补上了 <code>ros2 topic hz</code> 那段数据——原始笔记里只写了「好像不太稳」，
+        把数字摊开之后才看清问题的量级。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>舵机抖动的三种可能</title>
+      <link>https://margin.pages.dev/posts/servo-jitter.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/servo-jitter.html</guid>
+      <pubDate>Wed, 05 Aug 2026 00:00:00 +0800</pubDate>
+      <category>硬件</category>
+      <description>同一个角度指令，舵机却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，第三种最意外。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/servo-jitter.html">舵机抖动的三种可能</a> · 2026.08.05</em></p>
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">抖动这种故障有个特点：它看起来很小，但它会让你怀疑整个系统的精度。
+          我的云台在收到固定的 <code>JointState</code> 指令时，两个轴都在微小地颤，
+          幅度大概 0.3° 到 0.5°，肉眼勉强可见，但装在云台上的激光雷达把这件事放大了——
+          点云在原地"呼吸"，测距值来回跳 ±12 mm。</p>
+
+        <p>舵机抖动的成因，按我这些年遇到的频率排序，基本就三类：<strong>电源、信号、机械</strong>。
+          按这个顺序查，省时间，因为越靠前越好验证。</p>
+
+        <h2><span class="h2num">01</span>电源：最好排除，先做</h2>
+
+        <p>舵机在堵转和启动瞬间会拉很大的电流。一颗常见的数字舵机，静止时几十毫安，
+          转动瞬间可以拉到 800 mA 以上。如果它和逻辑电路共用一路电源，这个尖峰会把 3V3 拉下去——
+          这件事我在<mark>上一篇掉线排查里已经吃过一次亏</mark>，所以这次第一件事就是查它。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>测量 · 舵机供电 5 V 支路 · 电流钳</span></div>
+<pre>静止保持       42 mA
+收到指令瞬间   <span class="n">760</span> mA（峰值，约 15 ms）
+回落           55 mA
+5 V 跌落       5.02 V → 4.71 V   <span class="c">// 0.31 V，可接受</span>
+3V3 跌落       3.298 V → 3.294 V <span class="c">// 几乎没动</span></pre>
+        </div>
+
+        <p>0.31 V 的跌落不至于让舵机复位，逻辑侧更是纹丝不动。<strong>电源排除。</strong>
+          不过为了后面不再反复，我还是顺手补了 220 µF 的电容，把跌落压到 0.11 V——这不解决抖动，但让我心里踏实。</p>
+
+        <h2><span class="h2num">02</span>信号：示波器不会说谎</h2>
+
+        <p>第二类怀疑是 PWM 本身不稳。舵机靠脉宽定位，典型的 50 Hz、0.5–2.5 ms 映射 0–180°。
+          如果脉宽在抖，舵机就会跟着抖，这是最直接的因果。</p>
+
+        <p>我把示波器挂在信号线上，让系统持续发送同一个角度指令，测了 200 个周期：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>测量 · 脉宽 1.500 ms（对应 90°）· 200 次采样</span></div>
+<pre>平均     <span class="n">1.5002</span> ms
+标准差   <span class="n">0.0031</span> ms  <span class="c">// ±3.1 µs</span>
+极值     1.492 / 1.508 ms
+
+换算成角度：±3.1 µs ÷ 11.1 µs/° ≈ <span class="n">±0.28°</span></pre>
+        </div>
+
+        <p>找到嫌疑了。±3.1 µs 的脉宽抖动，换算过来正好是 ±0.28°，和观察到的抖动幅度吻合。</p>
+
+        <p>但这只是"吻合"，不是"证明"。我做了个对照实验：把信号源从 MCU 的硬件 PWM 换成一台信号发生器，
+          输出纯净的 1.500 ms 方波——<strong>舵机照抖</strong>。</p>
+
+        <blockquote>
+          <p>这一下把信号这条线也砍了一半：脉宽抖动确实存在，但它不是抖动的<em>原因</em>，
+            最多是放大器。干净的 1.500 ms 照样抖，说明舵机自己不想安静。</p>
+        </blockquote>
+
+        <h2><span class="h2num">03</span>机械：最意外的一种</h2>
+
+        <p>前两类都排得差不多的时候，我做了个一直没做的动作：<strong>用手按住云台支架</strong>。</p>
+
+        <p>不抖了。</p>
+
+        <p>松开，继续抖。再按住，又不抖。这个实验非常土，但它两秒钟就告诉了我真相：
+          抖的不是舵机，是<em>整个结构在共振</em>。舵机内部的 PID 在不停地纠正一个微小的位置误差，
+          纠正产生的力传递给支架，支架的形变又反馈成新的位置误差，形成闭环。
+          系统在一个它自己制造的正反馈里循环。</p>
+
+        <figure class="figure">
+          <svg viewBox="0 0 800 300" role="img" aria-label="抖动闭环示意">
+            <g font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text-3)">
+              <rect x="60" y="90" width="150" height="66" fill="none" stroke-width="1.5" style="stroke:var(--text-3)"/>
+              <text x="135" y="127" text-anchor="middle">位置误差</text>
+              <rect x="325" y="90" width="150" height="66" fill="none" stroke-width="1.5" style="stroke:var(--text-3)"/>
+              <text x="400" y="127" text-anchor="middle">舵机出力</text>
+              <rect x="590" y="90" width="150" height="66" fill="none" stroke-width="1.5" style="stroke:var(--text-3)"/>
+              <text x="665" y="127" text-anchor="middle">支架形变</text>
+            </g>
+            <g stroke-width="1.8" fill="none" marker-end="url(#ar)" style="stroke:var(--amber)">
+              <defs>
+                <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                  <path d="M0 0 L8 3 L0 6 z" style="fill:var(--amber)"/>
+                </marker>
+              </defs>
+              <path d="M212 123 H320"/>
+              <path d="M477 123 H585"/>
+              <path d="M665 158 V206 H135 V158"/>
+            </g>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".65" style="fill:var(--text-3)">
+              <text x="240" y="115">放大</text>
+              <text x="505" y="115">传递</text>
+              <text x="360" y="222">反馈（延迟 &lt; 1 ms，来不及衰减）</text>
+            </g>
+            <rect x="60" y="240" width="680" height="1" fill-opacity=".2" style="fill:var(--text-3)"/>
+            <text x="60" y="272" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--amber)">
+              结论：刚度不足时，控制环路把结构形变当成了位置误差 → 自激
+            </text>
+          </svg>
+          <figcaption><b>图 01</b> — 自激闭环。刚度是这里唯一的变量，把支架固定住等于把这条环路断开。</figcaption>
+        </figure>
+
+        <p>找到根因之后，修法就很直接了，一共三步，按效果排序：</p>
+
+        <ol>
+          <li><strong>加刚度。</strong> 支架从 2 mm 亚克力换成 3 mm 铝板，并在悬臂处补一颗 M3 螺丝。
+            这一条解决了 80% 的问题，肉眼看不出抖了。</li>
+          <li><strong>加死区。</strong> 在固件里判断：目标角度与上一次指令相差小于 0.5° 时，
+            <em>不发送</em>。舵机不必为一个它到不了的位置反复纠正。</li>
+          <li><strong>降指令频率。</strong> 原本 50 Hz 的指令刷新改成 20 Hz。舵机的控制周期本身也就 20 Hz 上下，
+            发得更快只是让它在两次有效动作之间多抖几下。</li>
+        </ol>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>firmware · 死区判断</span></div>
+<pre><span class="k">static</span> <span class="k">float</span> last_deg[<span class="n">2</span>] = {<span class="n">0</span>};
+
+<span class="k">void</span> write_servo(<span class="k">int</span> id, <span class="k">float</span> deg) {
+    <span class="c">// 小于 0.5° 的变化不值得发一次指令：</span>
+    <span class="c">// 舵机到不了，只会让它在目标附近来回纠正</span>
+    <span class="k">if</span> (fabsf(deg - last_deg[id]) &lt; <span class="n">0.5f</span>) <span class="k">return</span>;
+    last_deg[id] = deg;
+    servo_set_angle(id, deg);
+}</pre>
+        </div>
+
+        <h2><span class="h2num">04</span>修完之后的一点想法</h2>
+
+        <p>这次最花时间的不是解决问题，是<strong>承认问题不在我熟悉的地方</strong>。
+          我是写固件的，遇到抖动本能地去看 PWM 波形、去看定时器精度，那是我擅长也舒服的区域。
+          而真正的答案在我手能摸到的地方——一块太软的塑料板。</p>
+
+        <p>所以我给自己的排查顺序加了一条：<em>在打开示波器之前，先用手摸一遍结构</em>。
+          听起来不专业，但它最快。</p>
+
+        <dl class="revision">
+          <dt>2026.08.20 补充</dt>
+          <dd>有同行指出数字舵机的 PID 参数在部分型号上可通过串口调整，降低 P 增益也能缓解自激。
+            我手上这两颗不支持，没有实测，仅作记录。</dd>
+          <dt>2026.08.06 修订</dt>
+          <dd>更正：初稿写"脉宽抖动 ±3.1 µs 是主因"，对照实验后应降级为次要因素，正文已改。</dd>
+        </dl>
+      </div>
+
+      
+    </div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>我的工作台：一张桌上的十四件东西</title>
+      <link>https://margin.pages.dev/posts/workbench.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/workbench.html</guid>
+      <pubDate>Sun, 19 Jul 2026 00:00:00 +0800</pubDate>
+      <category>工作台</category>
+      <description>不谈性能参数，只谈趁手。有些工具用了六年还是原样，有些半年就换了三回。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/workbench.html">我的工作台：一张桌上的十四件东西</a> · 2026.07.19</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">桌面是 120 × 60 的，不算大。这个尺寸有个好处：伸手能够到所有东西，
+      所以你会非常清楚什么是真的常用，什么只是摆着好看。半年清理一次，
+      每次清完留在桌上的，大概就是这十四件。</p>
+
+    <p>我不打算写测评，参数网上都有。只写它们在我的日常工作里到底干了什么，
+      以及——更重要的——哪几件我后悔买晚了。</p>
+
+    <h2><span class="h2num">01</span>电源与测量</h2>
+
+    <p><strong>可调直流电源（30 V / 5 A）。</strong> 这是全桌最贵的东西，也是我最后悔买晚的。
+      在这之前我用一堆 USB 充电器和电池供电，于是所有"莫名其妙的复位"都被我归因为软件。
+      有了它之后，我能直接看到电流曲线——电机启动时拉多少、什么时候拉、持续多久，
+      一眼就知道该加多大的电容。上一篇文章里那个 0.42 V 的跌落，就是它帮我定量复现的。</p>
+
+    <p><strong>四位半万用表。</strong> 用得最多的是蜂鸣档和电压档。电流档我一年用不到十次，
+      因为电流我更信任电源上的读数。买的时候别纠结精度，纠结表笔——好表笔比好表更影响体验。</p>
+
+    <p><strong>手持示波器（100 MHz）。</strong> 不是每天都用，但每次用都是关键场合。
+      我买它是为了看 PWM 波形，后来发现它最大的价值是"让你停止猜测"：
+      信号到底有没有、什么时候有、多宽，看一眼就结束了争论。</p>
+
+    <figure class="figure">
+      <svg viewBox="0 0 800 260" role="img" aria-label="桌面布局俯视示意">
+        <rect x="40" y="30" width="720" height="200" fill="none" stroke-width="1.6" style="stroke:var(--text-3)"/>
+        <g stroke-opacity=".25" stroke-width="1" stroke-dasharray="3 4" style="stroke:var(--text-3)">
+          <path d="M40 130 H760"/>
+          <path d="M400 30 V230"/>
+        </g>
+        <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".8" style="fill:var(--text-3)">
+          <rect x="70" y="55" width="120" height="52" fill="none" style="stroke:var(--text-3)"/>
+          <text x="130" y="86" text-anchor="middle">电源</text>
+          <rect x="210" y="55" width="90" height="52" fill="none" style="stroke:var(--text-3)"/>
+          <text x="255" y="86" text-anchor="middle">示波器</text>
+          <rect x="320" y="55" width="70" height="52" fill="none" style="stroke:var(--text-3)"/>
+          <text x="355" y="86" text-anchor="middle">万用表</text>
+          <rect x="70" y="152" width="150" height="56" fill="none" style="stroke:var(--text-3)"/>
+          <text x="145" y="184" text-anchor="middle">面包板 / 待测板</text>
+          <rect x="240" y="152" width="90" height="56" fill="none" style="stroke:var(--text-3)"/>
+          <text x="285" y="184" text-anchor="middle">烙铁</text>
+          <rect x="430" y="70" width="290" height="90" fill="none" stroke-opacity=".5" style="stroke:var(--text-3)"/>
+          <text x="575" y="118" text-anchor="middle" fill-opacity=".55" style="fill:var(--text-3)">显示器 / 键盘</text>
+          <rect x="450" y="176" width="120" height="32" fill="none" style="stroke:var(--text-3)"/>
+          <text x="510" y="197" text-anchor="middle">笔记本</text>
+        </g>
+        <g font-family="ui-monospace,Consolas,monospace" font-size="10" style="fill:var(--amber)">
+          <text x="640" y="60">常动区</text>
+          <text x="640" y="228">固定区</text>
+        </g>
+      </svg>
+      <figcaption><b>图 01</b> — 桌面分区原则：右手边（常动区）只放今天在用的东西，其余全部收进抽屉。</figcaption>
+    </figure>
+
+    <h2><span class="h2num">02</span>焊接与连接</h2>
+
+    <p><strong>恒温烙铁（T12 头）。</strong> 从 30 块的外热式换过来，是这几年来性价比最高的一次升级。
+      真正的差别不是温度准，是<em>回温快</em>——焊一块大面积接地铜皮时，便宜烙铁会让你怀疑人生。</p>
+
+    <p><strong>细锡丝（0.6 mm，含松香）。</strong> 0.8 mm 用在 0603 上太多了，0.4 mm 又太慢。
+      0.6 是个中间值，我基本只买这个规格。</p>
+
+    <p><strong>杜邦线一盒 + 硅胶线若干。</strong> 杜邦线是消耗品，我每年扔掉一把接触不良的。
+      这里唯一的经验：<mark>看起来还能用的杜邦线，往往是排查三天之后的真凶</mark>。
+      我现在遇到间歇性问题，第一件事是把所有杜邦线换掉。</p>
+
+    <p><strong>压线钳和冷压端子。</strong> 真正需要长期可靠的连接时，别用杜邦线。
+      这一套我用得不多，但每次用都庆幸买了。</p>
+
+    <h2><span class="h2num">03</span>固定与结构</h2>
+
+    <p><strong>3D 打印机（入门级 FDM）。</strong> 买之前我以为会打很多外壳，
+      实际上打得最多的是<em>支架</em>和<em>治具</em>。上一篇文章里那个抖动的云台，
+      最后是用 3 mm 铝板解决的，但在此之前的三个验证版本，全是打印件——
+      它让我在两天里试了三种结构，而不是等一周的机加工。</p>
+
+    <p><strong>一套内六角螺丝（M2 / M2.5 / M3）。</strong> 分格盒装的，几十块钱。
+      这是全桌最不起眼但最救命的东西。缺一颗螺丝会让整个下午停摆。</p>
+
+    <p><strong>热熔胶枪。</strong> 我知道这不专业。但在验证阶段，能把东西固定在某个位置，
+      比固定得漂亮重要得多。</p>
+
+    <h2><span class="h2num">04</span>纸、光、和一杯水</h2>
+
+    <p><strong>台灯（可调色温、无频闪）。</strong> 焊了一晚上之后眼睛累不累，一半取决于它。
+      别在这上面省钱。</p>
+
+    <p><strong>A4 打印纸一包。</strong> 这个我在<a href="https://margin.pages.dev/posts/serial-log-day.html">上一篇</a>里写过：
+      把日志打印出来铺在地板上，我用它找到了三个模块同时报错的规律。
+      屏幕只能一屏一屏地看，纸能让你一次看到全貌。</p>
+
+    <p><strong>方格笔记本 + 一支 0.38 的笔。</strong> 手写的理由我<a href="https://margin.pages.dev/posts/handwriting-notes.html">另外写了一篇</a>，
+      这里只说一点：它就在手边，不需要开机。</p>
+
+    <p><strong>带盖的水杯。</strong> 最后一件，也是我认为最容易被忽略的一件。
+      不带盖的杯子放在桌上的第三年，我打翻了一杯水在电源上。带盖之后，这件事再没发生过。</p>
+
+    <h2><span class="h2num">05</span>半年换了三回的那些</h2>
+
+    <p>桌上还有一类东西，我一直在换：USB 集线器、无线鼠标、各种转接头、蓝牙音箱。
+      它们的共同点是：<strong>我并不真的依赖它们的可靠性</strong>。
+      坏了就换，不影响主线工作。</p>
+
+    <p>而真正常驻的十四件有个共同特征：<em>它们坏掉的那天，我的工作会直接停摆</em>。
+      判断一件工具值不值得买好的，我觉得就看这一条。</p>
+
+    <dl class="revision">
+      <dt>2026.09.10 更新</dt>
+      <dd>杜邦线那一段补了一句：间歇性故障先换线。过去三个月我遇到两次，两次都是线。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>为什么我还在手写笔记</title>
+      <link>https://margin.pages.dev/posts/handwriting-notes.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/handwriting-notes.html</guid>
+      <pubDate>Sun, 28 Jun 2026 00:00:00 +0800</pubDate>
+      <category>随笔</category>
+      <description>电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关，和速度有关。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/handwriting-notes.html">为什么我还在手写笔记</a> · 2026.06.28</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">先澄清一件事：我不反对电子笔记。我用过 Notion、Obsidian、各种 Markdown 编辑器，
+      付费订阅加起来也有小几千了。它们都很好用，检索快、同步稳、能贴代码。
+      我最后回到纸上，不是因为它们不好，是因为它们<strong>太快了</strong>。</p>
+
+    <p>这个理由听起来很怪，所以我展开讲。</p>
+
+    <h2><span class="h2num">01</span>打字太快，是记笔记的敌人</h2>
+
+    <p>我打字速度大概每分钟七八十个字，说话比这慢，思考比说话更慢。
+      于是当我在键盘上记笔记时，手永远在等脑子——不，反了，是<em>手跑在脑子前面</em>。</p>
+
+    <p>结果是：我把听到的、想到的，原封不动地打下来。三页笔记，两千多字，
+      一周之后回头看，里面全是废话。因为我当时根本没有时间判断哪句重要，
+      打字这个动作太省力了，省力到我可以不经过思考就完成它。</p>
+
+    <p>手写就不一样。手写每分钟大概二三十个字，比思考慢，也比说话慢。
+      这个速度差逼着我做一件事：<mark>在写下这句话之前，先决定它值不值得被写下来</mark>。
+      一页纸只能写这么多，所以每一句都得过一遍筛子。</p>
+
+    <blockquote>
+      <p>笔记的价值不在于记下了多少，而在于你被迫丢掉了多少。
+        手写是一种物理上的限速器，它让"记录"这个动作恰好慢到需要思考。</p>
+    </blockquote>
+
+    <h2><span class="h2num">02</span>画的图，键盘画不出来</h2>
+
+    <p>第二件事是画。我在调试现场经常需要画的东西：接线顺序、模块的相对位置、
+      一个说不清楚的波形、一块板上哪个元件发烫。这些东西在纸上三秒钟画完，
+      在任何笔记软件里都要纠结用什么工具。</p>
+
+    <p>而且手画图有个被低估的好处：<strong>画错很容易，改也很容易</strong>，
+      所以你敢画。用软件画图时，人会不自觉地想把图"画好"，注意力就从内容跑到了排版上。
+      纸上的丑图也是图，它能用就行。</p>
+
+    <p>我桌上那本方格本里，有大量这种丑图。上个月排查电源跌落时，
+      我在本子上画的那条电流曲线，比我在示波器上截的图更有用——
+      因为我在曲线旁边手写了三个数字和一句"这里是电机启动"，
+      三个月后我还看得懂，截图我不会去看第二眼。</p>
+
+    <h2><span class="h2num">03</span>纸不会通知我</h2>
+
+    <p>这一点和效率无关，和注意力有关。</p>
+
+    <p>我在电脑上记笔记，旁边有终端、有邮件、有二十个浏览器标签页。
+      打开笔记软件的那一刻，我就回到了那个"随时可能被打断"的状态里。
+      而纸就在那儿，它只有一个功能，它不提示我有新东西。</p>
+
+    <p>这不是什么深刻的道理，就是「物理隔离」四个字。
+      但这个隔离对我来说是必要的——我需要在一段时间内，脑子里只装一件事。</p>
+
+    <h2><span class="h2num">04</span>那电子笔记用来干什么</h2>
+
+    <p>我并没有放弃电子笔记，只是把两件事分开了：</p>
+
+    <ul>
+      <li><strong>纸：</strong> 现场的、临时的、需要画的、需要判断重要性的。用完就归档到抽屉里。</li>
+      <li><strong>电子：</strong> 最终的、需要检索的、需要贴代码和日志的。也就是这个博客上的每一篇。</li>
+    </ul>
+
+    <p>流程大概是：现场在纸上乱写 → 当天或第二天，把还能看懂的部分整理成电子文档 →
+      纸塞进抽屉，一年清理一次。整理这一步本身就是第二次思考，
+      很多纸上看起来顺理成章的东西，搬到电脑上时会发现逻辑断了。</p>
+
+    <p>我甚至觉得，这一遍"搬"的动作比我当初记的那一遍更有价值。
+      这也是为什么我在每篇文章末尾都留了<em>修订记录</em>——
+      搬上来的第一版，往往不是对的那一版。</p>
+
+    <h2><span class="h2num">05</span>最后</h2>
+
+    <p>我只想清楚一件事就够用了：<strong>工具的速度应该匹配思考的速度，而不是超过它</strong>。
+      打字比手写快，所以在"记录"这件事上，打字反而是更慢的——
+      因为它把判断的成本，推迟到了未来的某一天，而那一天你多半不会来。</p>
+
+    <p>现在我桌上有三本方格本，一本写完的，一本正在用的，一本没拆封的。
+      笔只有一支，0.38，用了两年。它不贵，也没有同步功能，
+      但它从来没有让我在写下一句之前，忘记先想一想。</p>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>两个输入，一个状态机</title>
+      <link>https://margin.pages.dev/posts/rotary-encoder-ui.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/rotary-encoder-ui.html</guid>
+      <pubDate>Thu, 28 May 2026 00:00:00 +0800</pubDate>
+      <category>设计</category>
+      <description>连续量用于调整，离散量用于切换——以及验收标准为什么值得写两条。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/rotary-encoder-ui.html">两个输入，一个状态机</a> · 2026.05.28</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">我手上这台设备的全部输入，只有一个旋转编码器：能左转、能右转、能按下去。
+      三个动作，其中两个还是同一个物理量的两个方向。</p>
+
+    <p>而它要控制的东西有：一个屏幕、一个摄像头、一张 SD 卡里的图片、以及一个正在跑脚本的系统。
+      于是问题来了——<strong>用三个动作，怎么表达这么多意图，而且不让人按错？</strong></p>
+
+    <p>下面是我当时写在便签上的设计，以及后来补上的几条理由。
+      把它整理成文字的过程比预想的更有用：<em>有些决定我原本只是「觉得应该这样」，
+      写下来才发现自己其实说不出为什么</em>。</p>
+
+    <h2><span class="h2num">01</span>原始设计</h2>
+
+    <blockquote>
+      <p>一、旋转编码器长按用于切换模式，旋转不能切换模式。</p>
+      <p>二、长按之后：如果原来是图片浏览模式，就切到拍照模式；如果在拍照模式，
+        屏幕实时显示摄像头画面；在图片浏览模式下，摄像头可以不工作。</p>
+      <p>三、在图片浏览模式时，旋转编码器用于切换图片。</p>
+      <p>四、拍照模式时旋转编码器能干什么——这个我还没有想好。</p>
+      <p>五、每次切换的时候，屏幕上弹一个提示，一秒左右之后消失。</p>
+    </blockquote>
+
+    <p>只有两个模式：<strong>图片浏览</strong>和<strong>拍照</strong>。
+      之所以这么少，不是因为想清楚了，而是因为输入手段实在有限——多加一个模式，
+      用户就得在脑子里多记一套映射关系，而编码器能给出的提示只有那一个屏幕。</p>
+
+    <h2><span class="h2num">02</span>为什么切模式必须用长按</h2>
+
+    <p>第一眼看去，用「旋转到尽头」来切模式更省事：转到最后一张图，再往右转就进拍照模式。
+      很多设备就是这么做的。我没这么做，理由有两条：</p>
+
+    <ul>
+      <li><strong>旋转是连续的、物理的、会误触的。</strong>
+        手指离开旋钮时的余力、桌面的震动、编码器本身的机械抖动，都可能产生一次多余的脉冲。
+        让一个会抖的信号去承担「切换状态」这种不可逆的职责，是危险的——
+        浏览图片时手一抖就跳进拍照模式，用户会以为设备坏了。</li>
+      <li><strong>按击是离散的、有明确意图的。</strong>
+        按下去是一个需要主动发力的动作，很难误触。而且「长按」比「短按」更重，
+        天然适合承载更重的操作。</li>
+    </ul>
+
+    <blockquote>
+      <p>由此得到一条我后来反复用到的规则：
+        <strong>连续量用于调整，离散量用于切换。</strong>
+        旋钮、滑条、摇杆这种可以取任意值的输入，适合「调大小」；
+        按钮、长按、双击这种取「有/无」的输入，适合「改状态」。</p>
+    </blockquote>
+
+    <p>于是分工就清楚了：</p>
+
+    <ul>
+      <li><strong>长按（≥ 1 秒）</strong>：切模式，这是全局操作，在任何模式下含义都一样。</li>
+      <li><strong>旋转</strong>：调整当前模式里的量。图片浏览模式下是上一张 / 下一张。</li>
+      <li><strong>短按（&lt; 1 秒）</strong>：在当前模式里执行一个即时动作。拍照模式下就是拍照。</li>
+    </ul>
+
+    <p>三个动作，各就各位。用户只需要记住一件事：<em>长按是「换房间」，旋转和短按是「在房间里做事」</em>。</p>
+
+    <h2><span class="h2num">03</span>没想好的那个，我打算留着</h2>
+
+    <p>原始设计里第四条写着「拍照模式时旋转编码器能干什么——没有想好」。
+      整理的时候我试着填上它，比如旋转调整曝光、或者切换分辨率。</p>
+
+    <p>但最后我决定保留这个空白。原因是：<strong>一个还没有真实需求的操作，
+      占着旋钮会让「旋转 = 切换」这个心智模型在不同模式下分裂</strong>。
+      用户在浏览模式转一下是换图，在拍照模式转一下却变成了改设置——
+      同一个动作，两种含义，两种后果。这种不一致带来的困惑，比「少一个功能」代价大得多。</p>
+
+    <p>更好的做法是让它暂时什么都不做。空白是可以被理解的；含义不稳定不行。</p>
+
+    <h2><span class="h2num">04</span>切换必须有回声</h2>
+
+    <p>模式切换有个隐蔽的问题：它<strong>不产生可见的后果</strong>。
+      从浏览切到拍照，屏幕内容会变（预览画面出来了），这算一个反馈；
+      但如果摄像头启动慢了两秒，这两秒里用户不知道自己按成功了没有。</p>
+
+    <p>所以设计里加了一条：切换时弹一个提示，标明「拍照模式」或「浏览模式」，一秒后自动消失。</p>
+
+    <p>一秒这个数字值得说说。太短（300 ms）会被当成闪烁，用户来不及读；
+      太长（3 秒）会盖住他想看的画面，还得等它走。一秒刚好是「确认收到，不添麻烦」的量级——
+      这也是绝大多数系统里 toast 提示的默认时长，不是巧合。</p>
+
+    <h2><span class="h2num">05</span>还有一个非交互的约束：摄像头只在需要时开</h2>
+
+    <p>设计里写着「图片浏览模式下，摄像头可以不工作」。这一条不属于交互设计，
+      属于资源管理，但它影响了交互：</p>
+
+    <p>如果摄像头一直开着，好处是切过去立刻有画面，代价是持续的功耗和发热，
+      在电池设备上不可接受。如果按需启动，就有启动延迟——<mark>而启动延迟必须由那个弹窗来兜住</mark>。</p>
+
+    <p>两条设计是咬合的：<em>因为按需启动，所以必须有即时反馈</em>。
+      写下来之后我才意识到自己当初并不是分别做的两个决定。</p>
+
+    <h2><span class="h2num">06</span>把设计意图翻译成验收标准</h2>
+
+    <p>设计做完之后还有一步，就是回答「怎么算做完了」。这件事比看起来难——
+      「能用」不是一个可以打勾的条目。</p>
+
+    <p>我给自己定了个模板：每个模块给<strong>两个判断点</strong>，第一条看功能，第二条看品质。
+      整理便签时发现，底盘、舵机、雷达三块竟然都自然长成了这个形状：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>模块</th>
+          <th>第一条：功能</th>
+          <th>第二条：品质</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>底盘</td>
+          <td>前进、后退、左右转弯都能用</td>
+          <td>动作是否平稳</td>
+        </tr>
+        <tr>
+          <td>舵机</td>
+          <td>180° 范围内能停在工作角度</td>
+          <td>转动是否平稳</td>
+        </tr>
+        <tr>
+          <td>雷达</td>
+          <td>数据能正常上传</td>
+          <td>上传的速度与平稳性</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>三条第二条都是「平稳」，这不是偷懒。<strong>让东西动起来通常很容易，
+      让它动得可控才是真正的工作量。</strong> 第一次让轮子转起来花了半天，
+      让它转得每个方向都可预测，花了两周。</p>
+
+    <h2><span class="h2num">07</span>一个我答不上来的问题</h2>
+
+    <p>整理这批笔记时，有个问题卡住了我：</p>
+
+    <blockquote>
+      <p>我这个电机没有集成测速传感器，它能够知道它自己向前或向后走了多少吗？</p>
+    </blockquote>
+
+    <p>严格地说：不能。没有编码器，电机只能知道「我通电了」，无法知道「轮子究竟转了几圈」。
+      电压相同、负载不同，转速可以差出一倍——这就是为什么小车重启后会一直转，
+      而且分不清方向（那段记录里的原话）。</p>
+
+    <p>当时我给自己的替代方案是：<strong>不要问「走了多远」，改用「能不能回到原点」来验收</strong>。
+      把初始化测试改成一轮：向前走一段、停下、向后走同样长的时间、停下，
+      最后看小车能不能回到起点附近。这样一个不需要测距的指标，
+      反而抓住了「前后对称性」这个更本质的东西。</p>
+
+    <p>另外我在便签里还记着「我有两个测速传感器，但是没接线」。
+      结论是：现在不需要，但得写进文档里——<em>当「能不能回到原点」这个验收开始变得不稳定时，
+      就是该把线接上的时候</em>。给未来留一个明确的触发条件，比现在就装上更划算。</p>
+
+    <h2><span class="h2num">08</span>这些设计最后留下的东西</h2>
+
+    <p>这套东西写在便签里的时候只是一堆散句。整理完之后，我觉得真正能复用的是四条：</p>
+
+    <ol>
+      <li><strong>连续量用于调整，离散量用于切换。</strong> 别让会抖的信号承担不可逆的操作。</li>
+      <li><strong>一个动作在不同模式下的含义要尽量一致。</strong> 做不到的时候，宁可让它空着。</li>
+      <li><strong>任何没有可见后果的操作，都必须给一个即时反馈。</strong> 哪怕只是一秒的弹窗。</li>
+      <li><strong>验收标准写两条：功能跑通，以及它是否平稳。</strong> 第二条才是真正花时间的部分。</li>
+    </ol>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自三段便签：2026 年 5 月 28 日的编码器交互设计、8 月 19 日的电机与验收标准讨论、
+        以及 9 月 13 日关于显示逻辑与重启后状态恢复的零散想法。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>新增第 02、03 两节。原文只写了「旋转不能切模式」这个结论，
+        没有写理由——补理由的过程让我发现自己当初的直觉是对的，只是说不清为什么。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>我改了那个函数，但跑的不是它</title>
+      <link>https://margin.pages.dev/posts/duplicate-handler.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/duplicate-handler.html</guid>
+      <pubDate>Mon, 22 Sep 2025 00:00:00 +0800</pubDate>
+      <category>调试</category>
+      <description>用三组对照排除两个方向，然后撞上有两个实现的 onAtmosphericDataReceived。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/duplicate-handler.html">我改了那个函数，但跑的不是它</a> · 2025.09.22</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">同一台真实设备、同一路数据，在两个页面上表现完全不同：</p>
+
+    <ul>
+      <li>「实况数据」页面：<strong>正常显示</strong>，数字在跳。</li>
+      <li>「调试窗口」页面：<strong>一片空白</strong>，什么都没有。</li>
+    </ul>
+
+    <p>这两个页面消费的是同一份数据。所以问题不可能出在"数据源"上——
+      它已经证明了数据是通的。剩下的可能性只在于：<em>数据在这条链路上被丢掉了一次</em>。</p>
+
+    <h2><span class="h2num">01</span>先做三个对照，把范围缩到一种组合</h2>
+
+    <p>手上有两个变量可以拨动：<strong>端口</strong>（8081 / 8082）和<strong>数据来源</strong>（真实设备 / 模拟数据）。
+      两个变量各两个取值，四种组合，我做了三次——因为其中一种就是坏掉的那个：</p>
+
+    <table>
+      <thead>
+        <tr><th>端口</th><th>数据来源</th><th>结果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>8081</td><td>真实设备</td><td>调试窗口空白</td></tr>
+        <tr><td>8082</td><td>真实设备</td><td>正常</td></tr>
+        <tr><td>8081</td><td>模拟数据</td><td>正常</td></tr>
+      </tbody>
+    </table>
+
+    <p>这张表比它看起来有用得多，因为它一次排除了两个方向：</p>
+
+    <ul>
+      <li><strong>8081 这个端口本身没问题</strong>——换成模拟数据它就好了。
+        所以不是端口配错、不是被占用、不是防火墙。</li>
+      <li><strong>真实设备的数据本身没问题</strong>——换到 8082 它就好了。
+        所以不是设备没在发、不是格式不合法。</li>
+    </ul>
+
+    <p>问题被逼进了一个很窄的角落：<mark>「8081 端口上的、真实设备发来的那份数据」</mark>。
+      前两个变量都无罪，有罪的只能是这个组合里的具体内容。</p>
+
+    <blockquote>
+      <p>这是我目前最依赖的排查手法：<strong>把所有变量摆成一张表，用最少的实验次数，
+        排除掉尽可能多的嫌疑</strong>。三次实验的代价，换来了"三个方向里只有一个还需要查"。</p>
+    </blockquote>
+
+    <h2><span class="h2num">02</span>第一个猜想：值没变，所以界面没重绘</h2>
+
+    <p>范围缩小之后，我猜了第一个原因：<strong>数据本身没变化</strong>。</p>
+
+    <p>前端有个很常见的坑——如果新值和旧值完全一样，很多渲染逻辑会认为"没必要更新"，
+      于是界面保持原样。空白可能是"从来没画过第一帧"，
+      因为第一帧到来的数据就已经"等于初始值"了。</p>
+
+    <p>这个猜想符合当时的表象，但我没有立刻去改代码。
+      因为"数据没变化"和"数据没到达"是两件事，症状却一模一样。
+      要分清它们，得往链路的上游走一步。</p>
+
+    <h2><span class="h2num">03</span>把链路拆成三个问题</h2>
+
+    <p>一条数据链路上有三个位置可能会断，我把它们写成三个必须回答的问题：</p>
+
+    <ol>
+      <li><strong>到底有没有触发转发？</strong> —— 数据到了，回调函数被执行了吗？</li>
+      <li><strong>转发的目标地址是什么？</strong> —— 就算执行了，它发去了正确的地方吗？</li>
+      <li><strong>转发的内容是什么？</strong> —— 就算发对了地方，发出去的东西是对的吗？</li>
+    </ol>
+
+    <p>为了让第一个问题能被回答，我在控制台加了一行转发日志。
+      如果日志都不出现，那后面两个问题就没有意义——这是最省时间的做法：
+      <em>先确认这条路上有没有人，再问他带了什么。</em></p>
+
+    <h2><span class="h2num">04</span>一动手就撞到的事：两个同名的函数</h2>
+
+    <p>准备去找这个回调函数的时候，我搜了一下它的名字。结果出来两条：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>全局搜索 onAtmosphericDataReceived</span></div>
+<pre>src/dataManager.js    →  function onAtmosphericDataReceived(data) { ... }
+src/manager.js        →  function onAtmosphericDataReceived(data) { ... }</pre>
+    </div>
+
+    <p><strong>同一个函数名，两份互相独立的实现。</strong></p>
+
+    <p>这意味着一个很糟的可能性：我刚才如果在 <code>dataManager.js</code> 里改了逻辑、加了日志，
+      而运行时实际执行的是 <code>manager.js</code> 里那一份——那我做的一切都是白费，
+      而且屏幕上不会有任何提示告诉我"你改错了地方"。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>确认到底哪一个在跑</span></div>
+<pre><span class="c">// 在函数体第一行打印调用栈，最直接</span>
+console.trace('onAtmosphericDataReceived called');
+<span class="c">// 控制台会告诉你调用它的那条路径经过了哪个文件</span></pre>
+    </div>
+
+    <p>这类问题的隐蔽之处在于：<strong>改代码这件事本身是"成功"的</strong>。
+      保存没报错、编译没报错、编辑器里看到的就是你写的那些字。
+      唯一不对的是——你改的不是会运行的那一份。</p>
+
+    <h2><span class="h2num">05</span>为什么会有两个同名函数</h2>
+
+    <p>回头看，这几乎是一个必然的结果，而不是意外：</p>
+
+    <ul>
+      <li><strong>先写了一个，后来重构又写了一个。</strong>
+        老的那份没有立刻删——"先留着，万一还要用"。于是它一直在那儿。</li>
+      <li><strong>两份代码的文件名都很合理。</strong>
+        <code>dataManager</code> 和 <code>manager</code>，
+        单看名字谁都不像垃圾。</li>
+      <li><strong>没人真的用过"搜索"这个动作。</strong>
+        如果当初写过一行 import 或者一次全局搜索，这个重复立刻就会暴露。</li>
+    </ul>
+
+    <p>所以我现在养成了一个习惯：<strong>改一个函数之前，先全局搜它的名字</strong>。
+      如果搜出来不止一处，先弄清楚哪一份在跑，再动手。
+      这一步大概花十秒，能省掉一个下午。</p>
+
+    <h2><span class="h2num">06</span>这件事留下的三句话</h2>
+
+    <ol>
+      <li><strong>两个变量就用表格铺开。</strong>
+        三种组合跑一遍，就能排除掉大部分方向。这比"凭感觉先改一处试试"快得多。</li>
+      <li><strong>先确认有没有人，再问他带了什么。</strong>
+        链路上先验证"函数有没有被调用"，再去看"内容对不对"。
+        顺序反了，就会在数据的细节里迷路。</li>
+      <li><strong>改代码之前先搜索这个名字。</strong>
+        同名实现是静默的——它不会报错，只会让你的修改石沉大海。</li>
+    </ol>
+
+    <p>至于最初那个空白窗口，我最后还是回到了"值没变所以没重绘"这条线上。
+      但如果没有前面对链路的确认，我连"值到底有没有到达"都不知道，
+      改重绘逻辑也只是在赌。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2025 年 9 月 22 日的一段便签。原始记录是散点的排查条目
+        （对照结果、三个待查问题、以及"两个同名函数"这个发现），
+        这里的结构是事后重排的。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>原文只写了"系统中有两个不同的 onAtmosphericDataReceived 实现"这一句。
+        重读时我觉得这一句才是整段记录里最值钱的部分，所以单独给它一节。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+
+    <item>
+      <title>一次好得可疑的拟合</title>
+      <link>https://margin.pages.dev/posts/suspicious-fit.html</link>
+      <guid isPermaLink="true">https://margin.pages.dev/posts/suspicious-fit.html</guid>
+      <pubDate>Mon, 08 Sep 2025 00:00:00 +0800</pubDate>
+      <category>数据</category>
+      <description>十二个点、残差 0.6 毫米，以及为什么「拟合得太好」是个危险信号。</description>
+      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/suspicious-fit.html">一次好得可疑的拟合</a> · 2025.09.08</em></p>
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">我需要一个数字：车辆的转弯半径。指标里写着它，验收时要交它，
+      而手上只有一条 GPS 轨迹——一堆经纬度点。</p>
+
+    <p>思路很直接：如果车在绕一个稳定的圆走，那这些点就应该落在同一个圆上。
+      三点定圆，十二点拟合一个误差最小的圆，圆心到点的距离就是半径。</p>
+
+    <p>代码跑通了，结果也出来了。但看着那组数字，我停了下来——
+      <mark>它好得不像是真的</mark>。</p>
+
+    <h2><span class="h2num">01</span>第一步：把经纬度变成米</h2>
+
+    <p>拟合圆是平面几何，而经纬度是球面上的角度。所以先要做一个局部投影：
+      选第一个点当原点，把后面每个点的经纬度差换算成米。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>convert_to_relative_coordinates</span></div>
+<pre>lat0, lon0 = points_lonlat[0]
+for lat, lon in points_lonlat:
+    y = (lat - lat0) * 111320.0
+    x = (lon - lon0) * 111320.0 * np.cos(np.radians(lat0))
+    rel.append((x, y))</pre>
+    </div>
+
+    <p>两个常数值得解释一下，因为它们是这类换算里最容易写错的地方：</p>
+
+    <ul>
+      <li><code>111320</code> 是<strong>纬度方向</strong>上 1 度对应的米数（地球子午线的平均曲率）。
+        这个值随纬度变化很小，工程上当成常数没问题。</li>
+      <li>经度方向要再乘一个 <code>cos(纬度)</code>。因为经线在两极收敛，同样 1 度经度，
+        在赤道上是 111 公里，在北纬 40 度只剩 85 公里。
+        <em>忘了这个余弦，是你算出来的形状被横向拉长</em>——圆会变成椭圆。</li>
+    </ul>
+
+    <p>这里还有一个必须做的防御：<strong>如果所有点都是同一个坐标</strong>，
+      后面拟合会得到一个无意义的圆心，甚至除以零。所以加一句全等判断，
+      直接返回失败而不是硬算出一个结果。</p>
+
+    <h2><span class="h2num">02</span>第二步：拟合一个圆</h2>
+
+    <p>两点连线的中垂线能定圆心，三点就能确定唯一的圆。但真实数据点不共圆，
+      所以要用最小二乘——找那个"让所有点到圆周距离平方和最小"的圆心和半径。</p>
+
+    <p>我用的是 <code>circle_fit</code> 里的 <code>hyper_fit</code>，
+      它的求解过程对噪声和外点比简单的代数法稳一些：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>fit_circle</span></div>
+<pre>def fit_circle(points_xy):
+    try:
+        xc, yc, r, _ = hyper_fit(points_xy)
+        if np.isnan(xc) or np.isnan(yc) or np.isnan(r):
+            logging.error(f"拟合圆结果异常: xc={xc}, yc={yc}, r={r}")
+            return None, None, None
+        return float(xc), float(yc), float(r)
+    except Exception as e:
+        logging.error(f"拟合圆失败: {e}")
+        return None, None, None</pre>
+    </div>
+
+    <p>结果对不对，不能只看 <code>r</code> 这一个数。所以我同时算了另外两个值：
+      <strong>所有点到圆心的最大距离</strong>和<strong>最小距离</strong>。
+      理想情况下它们都应该等于 <code>r</code>；它们和 <code>r</code> 的差距，
+      就是这组点"到底圆不圆"的度量。</p>
+
+    <h2><span class="h2num">03</span>结果</h2>
+
+    <p>十二个点，输出如下：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>result.json</span></div>
+<pre>{
+  "xc": -76.96346957340506,
+  "yc": -20.62260572804938,
+  "r": 79.67831662915245,
+  "R_outer": 79.678911761091,
+  "R_inner": 79.67796555660075,
+  "n_points": 12,
+  "ok": true
+}</pre>
+    </div>
+
+    <p>半径 <code>r = 79.678316</code> 米。翻译成直径，大约 159.4 米。</p>
+
+    <p>然后我把三个数字放在一起看，发现了问题：</p>
+
+    <table>
+      <thead>
+        <tr><th>量</th><th>值</th><th>与 r 的偏差</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>拟合半径 r</td><td>79.678316 m</td><td>—</td></tr>
+        <tr><td>最远点 R_outer</td><td>79.678912 m</td><td>+0.6 毫米</td></tr>
+        <tr><td>最近点 R_inner</td><td>79.677966 m</td><td>−0.35 毫米</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>十二个点，最大偏差 0.6 毫米。</strong></p>
+
+    <h2><span class="h2num">04</span>好得可疑</h2>
+
+    <p>如果这是一个机械加工件的检测报告，0.6 毫米的圆度误差说明工艺很好。
+      但这是一条<em>车辆 GPS 轨迹</em>。</p>
+
+    <p>民用 GPS 不开差分的时候，水平定位误差在<strong>米级</strong>；
+      就算用上 RTK 差分，稳定状态也在<strong>厘米级</strong>。
+      把坐标换算成米、再拟合，残差应该至少是厘米量级——
+      而实际残差比这还小了三个数量级。</p>
+
+    <p>换句话说：<mark>这组数据的精度，比设备能提供的精度高出一千倍</mark>。</p>
+
+    <p>能解释这个现象的原因，我想得到三种：</p>
+
+    <ul>
+      <li><strong>这些点不是实测的</strong>，而是某个环节按圆生成的（比如为了打通流程先造的测试数据）。</li>
+      <li><strong>点在进入这段计算之前被处理过</strong>——比如已经做过平滑、重采样，
+        把噪声滤掉了。但滤波会让点趋近于光滑曲线，也不至于到亚毫米。</li>
+      <li><strong>我拿到的列表不是真的十二条不同记录</strong>，而是少量点重复填充的。</li>
+    </ul>
+
+    <p>我没有结论，因为当时我没有回去核对原始数据是怎么来的——这是我的疏忽。
+      但这次经历给我留下了一条比代码更有用的规则。</p>
+
+    <blockquote>
+      <p>拟合出来的精度，永远不可能超过输入数据的精度。
+        所以当残差<em>远小于</em>你预期的时候，那不是在证明"算得准"，
+        而是说明"这组数据不是你想象的那样"。</p>
+    </blockquote>
+
+    <h2><span class="h2num">05</span>顺带说说那个 159 米</h2>
+
+    <p>还有一个数字需要警惕：直径 159.4 米。</p>
+
+    <p>车辆的"最小转弯直径"指的是：方向盘打到底、低速稳定行驶时，
+      车身外缘画出的那个圆。这个量级通常是<strong>十几米</strong>——
+      因为它由轴距和最大转向角决定，和车本身一样是个小尺度量。</p>
+
+    <p>159 米远大于此。所以这组点测的几乎肯定不是"最小转弯直径"，
+      而是车辆在某次绕行中走出的一个大弧。这两件事常被混为一谈，
+      但它们回答的是完全不同的问题：</p>
+
+    <table>
+      <thead>
+        <tr><th>指标</th><th>在问什么</th><th>量级</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>最小转弯半径 / 直径</td><td>车本身能拐多急</td><td>米</td></tr>
+        <tr><td>实际轨迹半径</td><td>这次它拐了多急</td><td>取决于当时怎么开</td></tr>
+      </tbody>
+    </table>
+
+    <p>如果验收表上写的是前者，那你不能拿后者的数据去填。
+      我在便签里给这段起的标题就是"转弯直径"——
+      现在回头看，这个命名本身就在诱导我把两个概念混起来。</p>
+
+    <h2><span class="h2num">06</span>代码之外的两件事</h2>
+
+    <p>这段代码本身没什么特别的，真正值得留下的是两条：</p>
+
+    <ol>
+      <li><strong>拟合类算法，必须输出"拟合得好不好"，而不只是"结果是什么"。</strong>
+        我顺手算的 <code>R_outer</code> / <code>R_inner</code> 本来只是想让输出好看点，
+        结果它们成了唯一能暴露问题的地方。如果我只返回 <code>r</code>，
+        这个 79.678 会被我原样写进报告。</li>
+      <li><strong>数字越精确，越要问它的量级对不对。</strong>
+        0.6 毫米的残差很精确，但它精确到了不该精确的地方；
+        159 米的直径也很精确，但它的量级回答不了"最小转弯"这个问题。
+        两个数字都在提醒同一件事：<em>先看量级，再看精度</em>。</li>
+    </ol>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2025 年 9 月 8 日的一段便签，代码与输出为当时的原文（含真实的返回 JSON）。
+        原始场景是给一条车辆轨迹算转弯半径。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>补上了第 04、05 两节。原始便签里只有代码和一行结果 JSON，
+        当时我觉得"跑通了"就收工了——重读时才发现那两个数字一直在报警。</dd>
+    </dl>
+  </div>
+
+  
+</div>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

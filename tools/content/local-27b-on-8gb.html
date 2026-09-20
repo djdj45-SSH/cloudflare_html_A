@@ -1,0 +1,214 @@
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">我手上有一台 8 GB 显存的笔记本，想在本地跑一个 27B 的模型。</p>
+
+    <p>按照参数量估算，这个规模即使做激进量化，通常也要十几 GB 显存——8 GB 看起来不该够。
+      但有一个例外：如果量化到<strong>三值</strong>（每个权重只有 -1、0、+1 三种取值），
+      那 27B 参数就只需要 27 × 1.58 ÷ 8 ≈ <strong>5.3 GB</strong>。数字上刚好能塞进去。</p>
+
+    <p>于是我从"加载失败"开始，一路撞到"上下文越长越慢"，中间还遇上一次参数和程序互相打架。
+      三个问题都留下了完整的日志，这篇就是把它们读一遍。</p>
+
+    <h2><span class="h2num">01</span>第一个问题：加载失败，但报错没告诉你为什么</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>LM Studio / llama.cpp</span></div>
+<pre>Failed to load model.
+error loading model: llama_model_loader: failed to load model from
+  D:\LM models\...\Bonsai-2-27B-PTQ1_0-CRACK.gguf</pre>
+    </div>
+
+    <p>这个报错几乎没有信息量。"failed to load model" 可能意味着文件损坏、
+      内存不足、路径有问题，或者——就像这次——<strong>格式不被识别</strong>。</p>
+
+    <p>原因是这个模型的量化类型叫 <code>PTQ1_0</code>。
+      GGUF 文件头里会写一个<em>量化类型编号</em>，而 <code>PTQ1_0</code> 是一个较新的编号，
+      标准版的 llama.cpp 里没有对应的解码器，于是它在读文件头的时候就放弃了。</p>
+
+    <blockquote>
+      <p>这里有一条容易踩错的认知：<strong>GGUF 是一种容器格式，不是兼容性保证。</strong>
+        它规定了元数据和张量要怎么摆放，但每个张量可以是任意一种量化类型。
+        文件名后缀（<code>Q4_K_M</code>、<code>IQ2_XS</code>、<code>PTQ1_0</code>……）
+        才是决定能不能加载的东西。</p>
+    </blockquote>
+
+    <p>解决方式是换一个支持这种类型的 llama.cpp 构建（上游分支或社区 fork 都行）。
+      有一条经验值得记住：<strong>不要用不支持的标准版强行加载</strong>。
+      有些实现不会报错，而是把不认识的权重按错误的方式解码，
+      结果就是模型能跑、但输出一塌糊涂——那种故障比直接加载失败难查十倍。</p>
+
+    <h2><span class="h2num">02</span>第二个问题：参数和程序打架</h2>
+
+    <p>换了后端之后，模型能加载了。但启动日志里冒出一行警告，我盯着看了很久：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>启动日志</span></div>
+<pre>common_fit_params: failed to fit params to free device memory:
+  n_gpu_layers already set by user to 75, abort</pre>
+    </div>
+
+    <p>字面意思是「参数拟合失败」，读起来像出错了。但实际含义恰恰相反：</p>
+
+    <p>llama.cpp 在启动时会做一件事——<strong>自己算一遍</strong>「你这台机器的空闲显存能放几层，
+      然后自动决定 <code>-ngl</code> 的值」。可我在命令行里已经手动写了 <code>-ngl 75</code>，
+      它一看我指定过了，就<em>放弃自动计算</em>（<code>abort</code> 在这里是"我不管了"的意思，
+      不是"程序终止了"）。</p>
+
+    <p>所以这行日志真正的含义是：<strong>接下来的显存管理，责任归你了。</strong>
+      它不再是错误，而是一次责任移交。要确认移交得好不好，只能自己去看：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>看显存的实际占用</span></div>
+<pre>nvidia-smi -l 1</pre>
+    </div>
+
+    <p>盯几秒，看三件事：显存是否接近上限、GPU 利用率高不高、
+      有没有出现"共享显存"（一旦开始借用系统内存，速度会断崖式下降）。</p>
+
+    <h2><span class="h2num">03</span>第三个问题：上下文越长，生成越慢</h2>
+
+    <p>这才是真正重要的一段。我把那两小时日志里的生成速度按上下文长度整理出来：</p>
+
+    <table>
+      <thead>
+        <tr><th>上下文长度</th><th>生成速度</th><th>处理输入的速度</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>约 9K</td><td>19.6 tokens/s</td><td>248 tokens/s</td></tr>
+        <tr><td>约 25K</td><td>18 – 19 tokens/s</td><td>—</td></tr>
+        <tr><td>约 40K</td><td>16 – 18 tokens/s</td><td>~178 tokens/s</td></tr>
+        <tr><td>约 50K</td><td>13 – 15 tokens/s</td><td>—</td></tr>
+        <tr><td>接近 64K</td><td>8 – 13 tokens/s</td><td>~140 tokens/s</td></tr>
+      </tbody>
+    </table>
+
+    <p><mark>从 20 掉到 8，衰减了六成。</mark>而这不是故障，是这个配置的必然结果——
+      因为注意力机制每一轮都要读一遍前面所有 token 的 KV 缓存，
+      上下文翻一倍，这部分开销也跟着翻。</p>
+
+    <p>日志里还有一条间接证据，说明缓存已经吃紧：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>提示缓存被清理</span></div>
+<pre>making room for prompt cache entry, removing oldest entry
+  (size = 612.442 MiB / 1263.644 MiB)</pre>
+    </div>
+
+    <p>为腾出空间，旧的提示缓存条目被丢掉了——
+      这意味着<strong>下次问到相关内容时，那部分 prefix 得重新计算一遍</strong>。
+      在长上下文下，重算的代价是几十秒级的。</p>
+
+    <h2><span class="h2num">04</span>三个参数，各管一件事</h2>
+
+    <p>理清上面的现象之后，调参就不再是碰运气了。启动命令里真正影响体验的只有三个：</p>
+
+    <table>
+      <thead>
+        <tr><th>参数</th><th>管什么</th><th>怎么定</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>-ngl</code></td>
+          <td>有多少层放到 GPU 上跑</td>
+          <td>显存够就往上加，直到 <code>nvidia-smi</code> 显示接近上限但没溢出</td>
+        </tr>
+        <tr>
+          <td><code>-c</code></td>
+          <td>上下文长度</td>
+          <td><strong>最影响速度的一刀。</strong> 64K 和 16K 是两个世界</td>
+        </tr>
+        <tr>
+          <td><code>--cache-type-k/v</code></td>
+          <td>KV 缓存用什么精度存</td>
+          <td><code>q4_0</code> 省显存、损质量；显存有余量就上 <code>q8_0</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>还有一个 <code>-fa on</code>（Flash Attention），它的作用是让注意力计算不需要把整个矩阵展开，
+      省显存也更省带宽。这个我建议一直开着——除非你的显卡架构不支持。</p>
+
+    <p>把这三者串起来看，思路就清楚了：<strong><code>-c</code> 决定你要花多少显存，
+      <code>--cache-type-*</code> 决定每单位缓存占多少显存，<code>-ngl</code> 决定剩下的够不够放模型。</strong>
+      三者是一道加法题，不是三个独立的开关。</p>
+
+    <h2><span class="h2num">05</span>两个容易被忽略的细节</h2>
+
+    <p><strong>第一，日志里的时间戳不好读。</strong>它长这样：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>日志行首</span></div>
+<pre>0.00.025.059  ...
+1.52.339.120  ...
+124.59.846.001  ...</pre>
+    </div>
+
+    <p>四段数字，格式是「分钟 . 秒 . 毫秒 . 微秒」。所以
+      <code>124.59.846.001</code> 是「第 124 分 59.846001 秒」，约两小时。
+      我第一次看以为第一段是小时，算出来一个不可能的数字——
+      这类格式在读日志时值得先确认一次，不然时间轴会整个错位。</p>
+
+    <p><strong>第二，服务默认没有访问控制。</strong></p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>启动时的警告</span></div>
+<pre>CORS is set to allow all origins ('*') and no API key is set
+this can be a security risk</pre>
+    </div>
+
+    <p>它默认只监听 <code>127.0.0.1</code>，所以在本机上用风险不大。
+      但如果你想从别的设备访问（就像我在
+      <a href="/posts/local-llm-timing.html">另一篇笔记</a>里那样改成 <code>0.0.0.0</code>），
+      就必须同时加上访问密钥，否则等于把一个可以随便调用的模型接口挂在了网上。</p>
+
+    <h2><span class="h2num">06</span>8 GB 显存到底能做什么</h2>
+
+    <p>这份日志跑了两小时出头，中途有几次客户端主动取消任务，
+      最后正常退出、没有崩溃。所以我的结论是：</p>
+
+    <ul>
+      <li><strong>能跑</strong>。一个 27B 的三值量化模型，在 8 GB 显存 + 16 GB 内存的笔记本上可以稳定运行。</li>
+      <li><strong>但不快</strong>。短上下文约 20 tokens/s，接近 64K 时掉到 8–13。
+        换算一下，8 tokens/s 大约相当于每秒出五六个汉字——能读，但要等。</li>
+      <li><strong>最划算的调法是降上下文</strong>，不是加 <code>-ngl</code>。
+        32K 上下文的速度明显好于 64K，而多数日常对话根本用不到 64K。</li>
+    </ul>
+
+    <p>这件事让我对"本地跑模型"有了一个更具体的认识：
+      真正决定体验的不是模型有多大，而是<em>你打算让它记住多长的上下文</em>。
+      参数表上的"支持 128K 上下文"是能力上限，不是推荐值——
+      把它当默认值用，代价会体现在每一次生成的速度上。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自一份两小时的 llama-server 运行日志与相应的排查记录。
+        机型为 Ryzen 7 7735H + RTX 4060（8 GB）+ 16 GB 内存，模型为 27B 三值量化。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>把「加载失败」和「性能衰减」合成了一篇——它们本来是同一次折腾的前后两段，
+        分开看只是两个孤立的问题，串起来才是一条完整的"从跑不动到跑起来再到跑得快"的路径。</dd>
+    </dl>
+  </div>
+
+  <aside class="notes">
+    <div class="notes__inner">
+      <div class="notes__toc"></div>
+      <p class="marginnote" style="margin-top:20px">
+        <b>1.58 bit 是怎么来的。</b>
+        一个权重有三种取值，信息量是 log₂(3) ≈ 1.585 比特。
+        这就是"三值量化"能把 27B 压到 5.3 GB 的原因——
+        相比 4 bit 量化（约 13.5 GB）少了六成。
+      </p>
+      <p class="marginnote">
+        <b>为什么 <code>abort</code> 不是"退出"。</b>
+        日志里的措辞取自它内部的函数名，不是面向用户的文案。
+        读这一条时要注意它后面还有没有继续输出——如果进程还在跑，那 abort 只是"跳过这一步"。
+      </p>
+      <p class="marginnote">
+        <b>KV 缓存的大小会算吗。</b>
+        大致是 <code>2 × 层数 × 上下文 × 隐藏维度 × 每元素字节数</code>
+        （2 是因为 K 和 V 各一份）。用 <code>q4_0</code> 时每元素约 0.5 字节，
+        这解释了为什么 64K 上下文即使量化后仍然是个大负担。
+      </p>
+    </div>
+  </aside>
+</div>

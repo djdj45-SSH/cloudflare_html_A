@@ -1,0 +1,181 @@
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">一台没有独立显卡的机器，我想在上面跑一个语言模型，并且让局域网里的其他设备也能调用它。</p>
+
+    <p>装的部分没什么好说的，一条命令就结束了。麻烦的地方在"跑起来"之后：
+      <strong>它默认只肯跟自己说话</strong>，而我看不出它到底是用什么在算、为什么第一次响应要等那么久。</p>
+
+    <p>这篇记的是那之后的四件事：让它对外说话、确认它在跑、看懂它在用什么算、以及把那 7 秒钟拆开。</p>
+
+    <h2><span class="h2num">01</span>第一件事：让它监听所有网卡</h2>
+
+    <p>默认情况下，服务只绑定在 <code>127.0.0.1</code>——也就是"只有本机能连"。
+      这台机器上跑得好好的，我在笔记本上 <code>curl</code> 它就是连不上。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>后台启动并监听所有网卡</span></div>
+<pre>nohup env OLLAMA_HOST=0.0.0.0:11434 ollama serve &gt;&gt; /var/log/ollama.log 2&gt;&amp;1 &amp;</pre>
+    </div>
+
+    <p>这一行里有四个东西，缺一个都会出问题：</p>
+
+    <ul>
+      <li><code>nohup</code> —— 让进程脱离终端。不加它，你断开 SSH 的那一刻服务就没了。</li>
+      <li><code>env OLLAMA_HOST=0.0.0.0:11434</code> —— 把监听地址改成<strong>所有网卡</strong>。
+        <code>0.0.0.0</code> 不是某个具体地址，它的意思是"接受来自任何网卡的连接"。
+        这是它的默认值 <code>127.0.0.1</code> 的反面。</li>
+      <li><code>&gt;&gt; /var/log/ollama.log 2&gt;&amp;1</code> —— 标准输出和错误都追加到日志文件。
+        <code>2&gt;&amp;1</code> 是必须的，否则错误信息会被丢掉——
+        而排查问题时，你要找的恰恰是错误信息。</li>
+      <li>末尾的 <code>&amp;</code> —— 放后台，让终端立刻还给你。</li>
+    </ul>
+
+    <h2><span class="h2num">02</span>第二件事：用三个动作确认它活着</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>确认</span></div>
+<pre><span class="c"># 1. 进程在不在</span>
+ps aux | grep ollama
+
+<span class="c"># 2. 日志里最后几行说了什么</span>
+tail -n 5 /var/log/ollama.log
+
+<span class="c"># 3. 接口通不通（注意用局域网地址，不是 localhost）</span>
+curl http://192.168.1.3:11434/api/generate \
+  -d '{"model":"llama3.2","prompt":"Hi","stream":false}'</pre>
+    </div>
+
+    <p>第三个动作有个容易做错的地方：<strong>测试要用局域网 IP，不能用 <code>localhost</code></strong>。
+      在 <code>localhost</code> 上测通，只证明"它自己认识自己"，
+      完全不能说明外部能不能连上。</p>
+
+    <h2><span class="h2num">03</span>第三件事：它在用什么算</h2>
+
+    <p>启动日志把硬件情况交代得很清楚：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>/var/log/ollama.log</span></div>
+<pre>level=INFO msg="discovering available GPUs..."
+level=INFO msg="model list cache hydration complete" models=1 failures=0 elapsed=10.330729ms
+level=INFO msg="inference compute" id=cpu library=cpu name=cpu total="10.9 GiB" available="6.3 GiB"
+level=INFO msg="vram-based default context" total_vram="0 B" default_num_ctx=4096</pre>
+    </div>
+
+    <p>逐行读：</p>
+
+    <ul>
+      <li><strong>第一行说它在找 GPU。</strong>后面没有出现任何 GPU 的名字，
+        而 <code>inference compute</code> 那行里 <code>id=cpu</code>、<code>library=cpu</code>——
+        意思很明确：<em>这台机器上没有它能用的加速设备，全部落到 CPU 上算</em>。</li>
+      <li><strong><code>total="10.9 GiB" available="6.3 GiB"</code></strong> 是内存的账。
+        这是最关键的一行：模型必须装进 <strong>6.3 GiB</strong> 这个可用额度里，
+        而不是标称的 10.9。已经跑着别的服务时，这个数会更小。</li>
+      <li><strong><code>total_vram="0 B"</code> + <code>default_num_ctx=4096</code></strong> 说明因为显存为零，
+        上下文长度被按 CPU 的默认值设成了 4096 个 token。想让它记住更长的对话，得手动调——
+        代价是内存占用同步上升。</li>
+    </ul>
+
+    <h2><span class="h2num">04</span>第四件事：那 7 秒花在哪了</h2>
+
+    <p>上面那条 <code>curl</code> 第一次跑完，返回的 JSON 里带着一组 <code>duration</code> 字段。
+      它们都是以<strong>纳秒</strong>为单位的整数，我把它换算成秒排了一遍：</p>
+
+    <table>
+      <thead>
+        <tr><th>字段</th><th>纳秒</th><th>秒</th><th>占比</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>load_duration</code></td><td>6 089 822 341</td><td>6.09 s</td><td>85.3%</td></tr>
+        <tr><td><code>prompt_eval_duration</code></td><td>522 756 000</td><td>0.52 s</td><td>7.3%</td></tr>
+        <tr><td><code>eval_duration</code></td><td>510 453 000</td><td>0.51 s</td><td>7.2%</td></tr>
+        <tr><td><code>total_duration</code></td><td>7 134 792 185</td><td>7.13 s</td><td>100%</td></tr>
+      </tbody>
+    </table>
+
+    <p><mark>7.13 秒里，6.09 秒花在"把模型加载进内存"上，真正算的部分只占了 1 秒。</mark></p>
+
+    <p>而且这 1 秒还能再拆：<code>prompt_eval</code> 是处理我那句 "Hi" 的时间（0.52 秒），
+      <code>eval</code> 是生成回答的时间（0.51 秒）。生成的量是 <code>eval_count: 8</code>——
+      八个 token。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>算一下出词速度</span></div>
+<pre>8 token ÷ 0.51 s ≈ 15.7 token/s</pre>
+    </div>
+
+    <p>15.7 token/秒，纯 CPU。这个速度用于生成短句是可以接受的——
+      它大概相当于人快速阅读的速度，等一两秒出半句话，感觉不算煎熬。
+      但用来写长文就会很难受：一千个 token 要等一分多钟。</p>
+
+    <p>更重要的是那个 6.09 秒。它<strong>不代表这台机器算得慢</strong>，
+      它代表"模型还没进内存"。所以同一台机器上第二次问同样的问题，
+      只要模型还在内存里，响应会明显快得多——因为最大的一块开销被跳过了。</p>
+
+    <p>这也是为什么"用同一句话前后测两次"这件事很重要：
+      第一次的数字看着吓人，但它测的是加载，不是推理。</p>
+
+    <h2><span class="h2num">05</span>停掉它</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>停止与确认</span></div>
+<pre>pkill -f "ollama serve"
+ps aux | grep "ollama serve" | grep -v grep</pre>
+    </div>
+
+    <p><code>-f</code> 让 pkill 匹配完整的命令行而不只是进程名，
+      这样能准确命中带参数启动的那个进程。
+      第二行的 <code>grep -v grep</code> 是把它自己的搜索进程过滤掉，
+      否则你永远会看到"似乎还有一个在跑"。</p>
+
+    <blockquote>
+      <p>这台机器上跑着模型、Agent、还有别的服务，内存的 <code>available</code> 是共享的。
+        所以"能不能跑某个模型"这个问题，答案不取决于模型有多大，
+        而取决于<em>此刻还剩多少可用内存</em>——它每天都不一样。</p>
+    </blockquote>
+
+    <h2><span class="h2num">06</span>留下四个可以带走的东西</h2>
+
+    <ol>
+      <li><strong>本地服务要对外，先看它绑在哪。</strong>
+        <code>127.0.0.1</code> 和 <code>0.0.0.0</code> 只差几个字符，一个只能自己用，一个全网可达。</li>
+      <li><strong>测连通性要用真实 IP，不要用 localhost。</strong>
+        这两个测试回答的是不同的问题。</li>
+      <li><strong><code>available</code> 才是能用的内存，不是 <code>total</code>。</strong>
+        决定模型能不能加载的是前者，而且它随时在变。</li>
+      <li><strong>看耗时不要只看总数，要拆开。</strong>
+        加载、处理输入、生成输出是三笔独立的账。
+        混在一起看，你会误以为"这台机器算得慢"，而实际上它只是"还没醒"。</li>
+    </ol>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月 31 日的便签记录。日志与 JSON 返回值为当时的真实输出，
+        机器为无独立显卡的 aarch64 设备（可用内存 6.3 GiB）。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>新增第 04 节。原始便签里只是把启动命令和几条验证命令罗列在一起，
+        没有解释那些 duration 字段——而它们才是"为什么第一次这么慢"的答案。</dd>
+    </dl>
+  </div>
+
+  <aside class="notes">
+    <div class="notes__inner">
+      <div class="notes__toc"></div>
+      <p class="marginnote" style="margin-top:20px">
+        <b>为什么不干脆用 <code>&gt; /dev/null</code>。</b>
+        把日志丢掉，服务照样能跑，但你就失去了唯一的观察窗口。
+        上面那四行判断"用什么在算"的信息，全部来自这个文件。
+      </p>
+      <p class="marginnote">
+        <b>纳秒这个单位容易骗人。</b>
+        7134792185 一眼看不出是多少秒。遇到这种长整数，
+        先做一次除法把它变成人能读的量级，再谈快慢。
+      </p>
+      <p class="marginnote">
+        <b>prompt_eval 和 eval 的区别。</b>
+        前者是"读完你说的话"要多久，后者是"写回答"要多久。
+        输入越长，第一部分越贵；输出越长，第二部分越贵。
+        两者优化的方向完全不同。
+      </p>
+    </div>
+  </aside>
+</div>

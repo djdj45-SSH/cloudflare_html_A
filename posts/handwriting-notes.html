@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>为什么我还在手写笔记 — 余量 MARGIN</title>
+<meta name="description" content="电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关，和速度有关：手跟不上脑子，于是被迫提炼。">
+<link rel="canonical" href="https://margin.pages.dev/posts/handwriting-notes.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="为什么我还在手写笔记 — 余量 MARGIN">
+<meta property="og:description" content="原因和记忆力无关，和速度有关。">
+<meta property="og:url" content="https://margin.pages.dev/posts/handwriting-notes.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">随笔 · No.04</div>
+      <h1>为什么我还在手写笔记</h1>
+      <p class="standfirst">电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关——和速度有关。</p>
+      <div class="byline">
+        <span><time datetime="2026-06-28">2026.06.28</time></span>
+        <span class="dot"></span><span data-readtime>约 6 分钟</span>
+        <span class="dot"></span><span>1,320 字</span>
+        <span class="dot"></span><span>1,320 字</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/essay.html">随笔</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">先澄清一件事：我不反对电子笔记。我用过 Notion、Obsidian、各种 Markdown 编辑器，
+          付费订阅加起来也有小几千了。它们都很好用，检索快、同步稳、能贴代码。
+          我最后回到纸上，不是因为它们不好，是因为它们<strong>太快了</strong>。</p>
+
+        <p>这个理由听起来很怪，所以我展开讲。</p>
+
+        <h2><span class="h2num">01</span>打字太快，是记笔记的敌人</h2>
+
+        <p>我打字速度大概每分钟七八十个字，说话比这慢，思考比说话更慢。
+          于是当我在键盘上记笔记时，手永远在等脑子——不，反了，是<em>手跑在脑子前面</em>。</p>
+
+        <p>结果是：我把听到的、想到的，原封不动地打下来。三页笔记，两千多字，
+          一周之后回头看，里面全是废话。因为我当时根本没有时间判断哪句重要，
+          打字这个动作太省力了，省力到我可以不经过思考就完成它。</p>
+
+        <p>手写就不一样。手写每分钟大概二三十个字，比思考慢，也比说话慢。
+          这个速度差逼着我做一件事：<mark>在写下这句话之前，先决定它值不值得被写下来</mark>。
+          一页纸只能写这么多，所以每一句都得过一遍筛子。</p>
+
+        <blockquote>
+          <p>笔记的价值不在于记下了多少，而在于你被迫丢掉了多少。
+            手写是一种物理上的限速器，它让"记录"这个动作恰好慢到需要思考。</p>
+        </blockquote>
+
+        <h2><span class="h2num">02</span>画的图，键盘画不出来</h2>
+
+        <p>第二件事是画。我在调试现场经常需要画的东西：接线顺序、模块的相对位置、
+          一个说不清楚的波形、一块板上哪个元件发烫。这些东西在纸上三秒钟画完，
+          在任何笔记软件里都要纠结用什么工具。</p>
+
+        <p>而且手画图有个被低估的好处：<strong>画错很容易，改也很容易</strong>，
+          所以你敢画。用软件画图时，人会不自觉地想把图"画好"，注意力就从内容跑到了排版上。
+          纸上的丑图也是图，它能用就行。</p>
+
+        <p>我桌上那本方格本里，有大量这种丑图。上个月排查电源跌落时，
+          我在本子上画的那条电流曲线，比我在示波器上截的图更有用——
+          因为我在曲线旁边手写了三个数字和一句"这里是电机启动"，
+          三个月后我还看得懂，截图我不会去看第二眼。</p>
+
+        <h2><span class="h2num">03</span>纸不会通知我</h2>
+
+        <p>这一点和效率无关，和注意力有关。</p>
+
+        <p>我在电脑上记笔记，旁边有终端、有邮件、有二十个浏览器标签页。
+          打开笔记软件的那一刻，我就回到了那个"随时可能被打断"的状态里。
+          而纸就在那儿，它只有一个功能，它不提示我有新东西。</p>
+
+        <p>这不是什么深刻的道理，就是「物理隔离」四个字。
+          但这个隔离对我来说是必要的——我需要在一段时间内，脑子里只装一件事。</p>
+
+        <h2><span class="h2num">04</span>那电子笔记用来干什么</h2>
+
+        <p>我并没有放弃电子笔记，只是把两件事分开了：</p>
+
+        <ul>
+          <li><strong>纸：</strong> 现场的、临时的、需要画的、需要判断重要性的。用完就归档到抽屉里。</li>
+          <li><strong>电子：</strong> 最终的、需要检索的、需要贴代码和日志的。也就是这个博客上的每一篇。</li>
+        </ul>
+
+        <p>流程大概是：现场在纸上乱写 → 当天或第二天，把还能看懂的部分整理成电子文档 →
+          纸塞进抽屉，一年清理一次。整理这一步本身就是第二次思考，
+          很多纸上看起来顺理成章的东西，搬到电脑上时会发现逻辑断了。</p>
+
+        <p>我甚至觉得，这一遍"搬"的动作比我当初记的那一遍更有价值。
+          这也是为什么我在每篇文章末尾都留了<em>修订记录</em>——
+          搬上来的第一版，往往不是对的那一版。</p>
+
+        <h2><span class="h2num">05</span>最后</h2>
+
+        <p>我只想清楚一件事就够用了：<strong>工具的速度应该匹配思考的速度，而不是超过它</strong>。
+          打字比手写快，所以在"记录"这件事上，打字反而是更慢的——
+          因为它把判断的成本，推迟到了未来的某一天，而那一天你多半不会来。</p>
+
+        <p>现在我桌上有三本方格本，一本写完的，一本正在用的，一本没拆封的。
+          笔只有一支，0.38，用了两年。它不贵，也没有同步功能，
+          但它从来没有让我在写下一句之前，忘记先想一想。</p>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>0.38 而不是 0.5。</b> 方格本格子通常是 5 mm，0.5 的笔在格子里写两行会很挤。
+            0.38 写得下，也不至于太细。这个纯粹是个人偏好。
+          </p>
+          <p class="marginnote">
+            <b>写完的本子我留着。</b> 一年清理一次，但只扔掉确认没用的。
+            去年翻出 2023 年的一本，里面有半页解决了当时困扰我一周的问题——那次我记在了纸上，没搬上来。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/rotary-encoder-ui.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">两个输入，一个状态机</span>
+      </a>
+      <a href="/posts/workbench.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">我的工作台：一张桌上的十四件东西</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/workbench.html">
+          <span class="relitem__meta">07.19 · 工作台</span>
+          <span class="relitem__title">我的工作台：一张桌上的十四件东西</span>
+          <span class="relitem__sum">不谈性能参数，只谈趁手。有些工具用了六年还是原样，有些半年就换了三回。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="handwriting-notes" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

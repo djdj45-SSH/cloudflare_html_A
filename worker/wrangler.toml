@@ -1,0 +1,21 @@
+# 余量 MARGIN — 留言板 Worker
+# 部署：cd worker && wrangler deploy
+
+name = "margin-comments"
+main = "index.js"
+compatibility_date = "2025-09-01"
+
+# 部署后地址形如 https://margin-comments.<你的子域>.workers.dev
+# 把它填回 tools/posts.json 的 site.commentsApi，然后重新构建站点
+
+[[d1_databases]]
+binding = "DB"                                  # 代码里用 env.DB 访问
+database_name = "margin_comments"
+database_id = "执行 wrangler d1 create margin_comments 后会得到这个 id"
+
+[vars]
+# 允许哪些来源跨域调用。上线后建议改成你自己的域名，缩小暴露面。
+ALLOWED_ORIGIN = "https://margin.pages.dev"
+
+# OWNER_KEY 不要写在这里——用 secret 保存：
+#   wrangler secret put OWNER_KEY

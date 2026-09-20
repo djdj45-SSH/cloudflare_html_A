@@ -1,0 +1,181 @@
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">先说结论，省得你读到最后才发现这篇没有奇迹：我把延迟从 100 ms 压到了 12 ms，
+          但没能压到 5 ms 以下。剩下的那部分，我至今不知道是什么，我把已知的全部写在这里。</p>
+
+        <p>事情起因于一个很具体的数字。我的 ESP32 通过 micro-ROS 往 Agent 发 <code>sensor_msgs/LaserScan</code>，
+          实测可靠吞吐只有约 1 Hz。雷达本身是 5 Hz 的，也就是说有 80% 的数据在路上丢了。
+          查吞吐之前，我先查了最底层的东西：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>agent$ ping 192.168.1.11 · 100 包</span></div>
+<pre>100 packets transmitted, 100 received, 0% packet loss
+rtt min/avg/max/mdev = <span class="n">11.402</span>/<span class="n">98.713</span>/<span class="n">341.228</span>/<span class="n">62.019</span> ms</pre>
+        </div>
+
+        <p>零丢包，平均 98.7 ms，最大 341 ms，标准差 62 ms。这三个数字里，<strong>最要命的不是平均值，是标准差</strong>。
+          平均 100 ms 的链路勉强能干活；抖动 62 ms 的链路没法干活，因为你不敢设超时。</p>
+
+        <h2><span class="h2num">01</span>先分清：是 Wi-Fi 还是 ROS？</h2>
+
+        <p>这是第一个岔路口。我用一个很土但有效的办法：跑纯 ping 的同时跑 ROS 话题，看谁先崩。</p>
+
+        <ul>
+          <li>不跑 ROS，只 ping：平均 96 ms。</li>
+          <li>跑 ROS，同时 ping：平均 101 ms，话题频率 1 Hz。</li>
+          <li>只跑 ROS，用 <code>ros2 topic hz</code> 看：1.02 Hz。</li>
+        </ul>
+
+        <p>ping 基本没变化，说明 DDS 不是延迟的制造者，它只是<strong>受害者</strong>——
+          eProsima 默认的可靠传输在乱序和抖动面前会疯狂重传，重传又制造更多抖动，于是吞吐塌方。</p>
+
+        <blockquote>
+          <p>把问题从"A 和 B 之间有问题"缩小到"A 和 B 之间的链路本身有问题"，这一步省了我至少半天。
+            很多人一上来就调 DDS 的 QoS 参数，那是给漏水的管子缠胶带。</p>
+        </blockquote>
+
+        <h2><span class="h2num">02</span>iperf：吞吐其实不差</h2>
+
+        <p>延迟高，通常伴随吞吐低。但测出来不是这样：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>iperf3 · TCP · 60 秒</span></div>
+<pre>[ ID] Interval           Transfer     Bitrate         Retr
+[  5] 0.00-60.00 sec     412 MBytes   <span class="n">57.6</span> Mbits/sec   <span class="n">189</span>   sender
+[  5] 0.00-60.00 sec     411 MBytes   <span class="n">57.4</span> Mbits/sec          receiver</pre>
+        </div>
+
+        <p>57 Mbps，对 2.4 GHz 单流来说是很正常的成绩。189 次重传不算多。
+          <mark>吞吐正常、延迟爆炸，这种组合几乎总是指向缓冲（buffer）</mark>——
+          某个环节在排队，把延迟堆了起来。这就是所谓的 bufferbloat。</p>
+
+        <figure class="figure">
+          <svg viewBox="0 0 800 320" role="img" aria-label="延迟分布直方图">
+            <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".6" style="fill:var(--text-3)">
+              <text x="40" y="34">延迟分布 · 500 次 ping</text>
+            </g>
+            <path d="M40 274 H764" stroke-width="1.4" fill="none" style="stroke:var(--text-3)"/>
+            <g fill-opacity=".85" style="fill:var(--amber)">
+              <rect x="60"  y="196" width="34" height="78"/>
+              <rect x="100" y="150" width="34" height="124"/>
+              <rect x="140" y="88"  width="34" height="186"/>
+              <rect x="180" y="60"  width="34" height="214"/>
+              <rect x="220" y="104" width="34" height="170"/>
+              <rect x="260" y="168" width="34" height="106"/>
+              <rect x="300" y="210" width="34" height="64"/>
+              <rect x="340" y="238" width="34" height="36"/>
+              <rect x="380" y="252" width="34" height="22"/>
+              <rect x="420" y="260" width="34" height="14"/>
+            </g>
+            <g fill-opacity=".45" style="fill:var(--text-3)">
+              <rect x="460" y="264" width="34" height="10"/>
+              <rect x="500" y="268" width="34" height="6"/>
+              <rect x="540" y="270" width="34" height="4"/>
+              <rect x="580" y="271" width="34" height="3"/>
+              <rect x="620" y="272" width="34" height="2"/>
+              <rect x="660" y="272" width="34" height="2"/>
+              <rect x="700" y="273" width="34" height="1"/>
+            </g>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".55" style="fill:var(--text-3)">
+              <text x="52"  y="292">10</text>
+              <text x="132" y="292">50</text>
+              <text x="212" y="292">90</text>
+              <text x="292" y="292">130</text>
+              <text x="372" y="292">170</text>
+              <text x="452" y="292">210</text>
+              <text x="532" y="292">250</text>
+              <text x="612" y="292">290</text>
+              <text x="692" y="292">330 ms</text>
+            </g>
+            <g stroke-width="1.4" fill="none" stroke-dasharray="5 4" style="stroke:var(--amber)">
+              <path d="M150 60 V278"/>
+            </g>
+            <text x="156" y="52" font-family="ui-monospace,Consolas,monospace" font-size="11" style="fill:var(--amber)">众数 ≈ 65 ms</text>
+          </svg>
+          <figcaption><b>图 01</b> — 延迟不是均匀分布，主峰在 60–90 ms，另有一条拖到 330 ms 的长尾。长尾才是致命的部分。</figcaption>
+        </figure>
+
+        <h2><span class="h2num">03</span>三个嫌疑，逐个排除</h2>
+
+        <h3>嫌疑一：信道拥塞</h3>
+        <p>扫下来 2.4 GHz 一共 13 个网络，1、6、11 三个互不重叠的信道全被占，我所在的是 6，
+          上面有 5 个 AP。这确实不好，但换个场景验证一下就知道分量：凌晨三点复测，
+          平均延迟从 98 ms 降到 71 ms。有改善，但不是全部。</p>
+
+        <h3>嫌疑二：ESP32 的 Wi-Fi 省电</h3>
+        <p>默认的 <code>WIFI_PS_MIN_MODEM</code> 会让 RF 周期性休眠，代价就是延迟和抖动。
+          我改成 <code>WIFI_PS_NONE</code>：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>firmware · 改后复测</span></div>
+<pre><span class="c">// esp_wifi_set_ps(WIFI_PS_NONE);  // 关掉 modem sleep</span>
+100 packets transmitted, 100 received
+rtt min/avg/max/mdev = <span class="n">6.118</span>/<span class="n">43.206</span>/<span class="n">188.440</span>/<span class="n">31.507</span> ms</pre>
+        </div>
+
+        <p>平均从 98 ms 掉到 43 ms。<strong>这是单一改动里收益最大的一步</strong>，
+          代价是功耗——电池供电的项目要自己权衡。</p>
+
+        <h3>嫌疑三：Agent 侧的 USB 无线网卡</h3>
+        <p>我的 Agent 主机用的是一块 USB 无线网卡。把它拔掉，改接有线到同一个路由器：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>改有线后 · ESP32 仍走 Wi-Fi</span></div>
+<pre>rtt min/avg/max/mdev = <span class="n">4.902</span>/<span class="n">12.884</span>/<span class="n">51.306</span>/<span class="n">9.774</span> ms</pre>
+        </div>
+
+        <p>12.9 ms。到这里，1 Hz 的吞吐涨到了稳定 5 Hz——正好是雷达的物理频率，
+          也就是说链路不再是瓶颈了。</p>
+
+        <blockquote>
+          <p>原来 100 ms 里，有大约 55 ms 花在 ESP32 的 modem sleep 上，
+            有大约 30 ms 花在 Agent 那块 USB 网卡和它的驱动上，剩下的才是空气里本来该有的时间。</p>
+        </blockquote>
+
+        <h2><span class="h2num">04</span>剩下那部分，我没解决</h2>
+
+        <p>mdev 还有 9.8 ms，最大 51 ms。对大多数应用够用了，但对我要做的实时控制链路不够——
+          舵机闭环时，51 ms 的单次抖动意味着一次明显的过冲。</p>
+
+        <p>我试过但没用的几件事，一并记下来，省得你再走一遍：</p>
+
+        <ul>
+          <li>调 <code>RMW</code> 的 QoS：把 reliability 从 RELIABLE 改成 BEST_EFFORT，吞吐没再涨（本来就已经到物理频率上限了）。</li>
+          <li>改 MTU：从 1500 降到 1200，无变化。局域网不分片，这不是问题所在。</li>
+          <li>绑定信道带宽 20 MHz / 40 MHz：40 MHz 吞吐更好但抖动更差，最后选了 20 MHz。</li>
+          <li>把路由器换成另一个品牌：平均降到 9 ms，但 mdev 依然有 7 ms。说明<strong>空气里的时间不是零</strong>，
+            2.4 GHz 的 CSMA/CA 天生就有 contention 开销。</li>
+        </ul>
+
+        <p>所以这篇的结尾是开放的：我能把 Wi-Fi 上跑 ROS 2 做到"够用"，但做不到"确定"。
+          如果你的项目对延迟有硬要求，我的建议很朴素——<strong>能走线就走线</strong>。
+          我最后的控制链路改成了串口，把 Wi-Fi 留给那些不关心 50 ms 的数据。</p>
+
+        <p>工具本身没有错，错的是把它用在它不擅长的地方。这句话我大概每年都要重新学一次。</p>
+
+        <dl class="revision">
+          <dt>2026.09.02 补充</dt>
+          <dd>有读者问为什么不上 5 GHz。ESP32-WROOM 只支持 2.4 GHz，这个型号没得选；ESP32-C5 / S3 的部分型号才支持 5 GHz。</dd>
+          <dt>2026.08.28 修订</dt>
+          <dd>初稿把 43 ms 写成"最终值"，那是只改了省电模式的中间结果。加上有线对比后应为 12.9 ms，已更正。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>mdev 比 avg 重要。</b> ping 的 mdev（标准差）决定你敢不敢设超时。
+            平均 20 ms 但 mdev 30 ms 的链路，比平均 50 ms 但 mdev 3 ms 的链路难用得多。
+          </p>
+          <p class="marginnote">
+            <b>iperf 要跑 60 秒以上。</b> 10 秒的采样会被 TCP 慢启动和周期性干扰带偏，
+            我第一次测出来 71 Mbps，第二次 57 Mbps，跑了 60 秒才稳定。
+          </p>
+          <p class="marginnote">
+            <b>ros2 topic hz</b> 是判断链路是否成为瓶颈最快的工具：
+            如果它显示的值正好等于传感器物理频率，说明链路已经不是限制了；如果明显低于，先别改代码，去查链路。
+          </p>
+        </div>
+      </aside>
+    </div>

@@ -1,0 +1,202 @@
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">我需要一个数字：车辆的转弯半径。指标里写着它，验收时要交它，
+      而手上只有一条 GPS 轨迹——一堆经纬度点。</p>
+
+    <p>思路很直接：如果车在绕一个稳定的圆走，那这些点就应该落在同一个圆上。
+      三点定圆，十二点拟合一个误差最小的圆，圆心到点的距离就是半径。</p>
+
+    <p>代码跑通了，结果也出来了。但看着那组数字，我停了下来——
+      <mark>它好得不像是真的</mark>。</p>
+
+    <h2><span class="h2num">01</span>第一步：把经纬度变成米</h2>
+
+    <p>拟合圆是平面几何，而经纬度是球面上的角度。所以先要做一个局部投影：
+      选第一个点当原点，把后面每个点的经纬度差换算成米。</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>convert_to_relative_coordinates</span></div>
+<pre>lat0, lon0 = points_lonlat[0]
+for lat, lon in points_lonlat:
+    y = (lat - lat0) * 111320.0
+    x = (lon - lon0) * 111320.0 * np.cos(np.radians(lat0))
+    rel.append((x, y))</pre>
+    </div>
+
+    <p>两个常数值得解释一下，因为它们是这类换算里最容易写错的地方：</p>
+
+    <ul>
+      <li><code>111320</code> 是<strong>纬度方向</strong>上 1 度对应的米数（地球子午线的平均曲率）。
+        这个值随纬度变化很小，工程上当成常数没问题。</li>
+      <li>经度方向要再乘一个 <code>cos(纬度)</code>。因为经线在两极收敛，同样 1 度经度，
+        在赤道上是 111 公里，在北纬 40 度只剩 85 公里。
+        <em>忘了这个余弦，是你算出来的形状被横向拉长</em>——圆会变成椭圆。</li>
+    </ul>
+
+    <p>这里还有一个必须做的防御：<strong>如果所有点都是同一个坐标</strong>，
+      后面拟合会得到一个无意义的圆心，甚至除以零。所以加一句全等判断，
+      直接返回失败而不是硬算出一个结果。</p>
+
+    <h2><span class="h2num">02</span>第二步：拟合一个圆</h2>
+
+    <p>两点连线的中垂线能定圆心，三点就能确定唯一的圆。但真实数据点不共圆，
+      所以要用最小二乘——找那个"让所有点到圆周距离平方和最小"的圆心和半径。</p>
+
+    <p>我用的是 <code>circle_fit</code> 里的 <code>hyper_fit</code>，
+      它的求解过程对噪声和外点比简单的代数法稳一些：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>fit_circle</span></div>
+<pre>def fit_circle(points_xy):
+    try:
+        xc, yc, r, _ = hyper_fit(points_xy)
+        if np.isnan(xc) or np.isnan(yc) or np.isnan(r):
+            logging.error(f"拟合圆结果异常: xc={xc}, yc={yc}, r={r}")
+            return None, None, None
+        return float(xc), float(yc), float(r)
+    except Exception as e:
+        logging.error(f"拟合圆失败: {e}")
+        return None, None, None</pre>
+    </div>
+
+    <p>结果对不对，不能只看 <code>r</code> 这一个数。所以我同时算了另外两个值：
+      <strong>所有点到圆心的最大距离</strong>和<strong>最小距离</strong>。
+      理想情况下它们都应该等于 <code>r</code>；它们和 <code>r</code> 的差距，
+      就是这组点"到底圆不圆"的度量。</p>
+
+    <h2><span class="h2num">03</span>结果</h2>
+
+    <p>十二个点，输出如下：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>result.json</span></div>
+<pre>{
+  "xc": -76.96346957340506,
+  "yc": -20.62260572804938,
+  "r": 79.67831662915245,
+  "R_outer": 79.678911761091,
+  "R_inner": 79.67796555660075,
+  "n_points": 12,
+  "ok": true
+}</pre>
+    </div>
+
+    <p>半径 <code>r = 79.678316</code> 米。翻译成直径，大约 159.4 米。</p>
+
+    <p>然后我把三个数字放在一起看，发现了问题：</p>
+
+    <table>
+      <thead>
+        <tr><th>量</th><th>值</th><th>与 r 的偏差</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>拟合半径 r</td><td>79.678316 m</td><td>—</td></tr>
+        <tr><td>最远点 R_outer</td><td>79.678912 m</td><td>+0.6 毫米</td></tr>
+        <tr><td>最近点 R_inner</td><td>79.677966 m</td><td>−0.35 毫米</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>十二个点，最大偏差 0.6 毫米。</strong></p>
+
+    <h2><span class="h2num">04</span>好得可疑</h2>
+
+    <p>如果这是一个机械加工件的检测报告，0.6 毫米的圆度误差说明工艺很好。
+      但这是一条<em>车辆 GPS 轨迹</em>。</p>
+
+    <p>民用 GPS 不开差分的时候，水平定位误差在<strong>米级</strong>；
+      就算用上 RTK 差分，稳定状态也在<strong>厘米级</strong>。
+      把坐标换算成米、再拟合，残差应该至少是厘米量级——
+      而实际残差比这还小了三个数量级。</p>
+
+    <p>换句话说：<mark>这组数据的精度，比设备能提供的精度高出一千倍</mark>。</p>
+
+    <p>能解释这个现象的原因，我想得到三种：</p>
+
+    <ul>
+      <li><strong>这些点不是实测的</strong>，而是某个环节按圆生成的（比如为了打通流程先造的测试数据）。</li>
+      <li><strong>点在进入这段计算之前被处理过</strong>——比如已经做过平滑、重采样，
+        把噪声滤掉了。但滤波会让点趋近于光滑曲线，也不至于到亚毫米。</li>
+      <li><strong>我拿到的列表不是真的十二条不同记录</strong>，而是少量点重复填充的。</li>
+    </ul>
+
+    <p>我没有结论，因为当时我没有回去核对原始数据是怎么来的——这是我的疏忽。
+      但这次经历给我留下了一条比代码更有用的规则。</p>
+
+    <blockquote>
+      <p>拟合出来的精度，永远不可能超过输入数据的精度。
+        所以当残差<em>远小于</em>你预期的时候，那不是在证明"算得准"，
+        而是说明"这组数据不是你想象的那样"。</p>
+    </blockquote>
+
+    <h2><span class="h2num">05</span>顺带说说那个 159 米</h2>
+
+    <p>还有一个数字需要警惕：直径 159.4 米。</p>
+
+    <p>车辆的"最小转弯直径"指的是：方向盘打到底、低速稳定行驶时，
+      车身外缘画出的那个圆。这个量级通常是<strong>十几米</strong>——
+      因为它由轴距和最大转向角决定，和车本身一样是个小尺度量。</p>
+
+    <p>159 米远大于此。所以这组点测的几乎肯定不是"最小转弯直径"，
+      而是车辆在某次绕行中走出的一个大弧。这两件事常被混为一谈，
+      但它们回答的是完全不同的问题：</p>
+
+    <table>
+      <thead>
+        <tr><th>指标</th><th>在问什么</th><th>量级</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>最小转弯半径 / 直径</td><td>车本身能拐多急</td><td>米</td></tr>
+        <tr><td>实际轨迹半径</td><td>这次它拐了多急</td><td>取决于当时怎么开</td></tr>
+      </tbody>
+    </table>
+
+    <p>如果验收表上写的是前者，那你不能拿后者的数据去填。
+      我在便签里给这段起的标题就是"转弯直径"——
+      现在回头看，这个命名本身就在诱导我把两个概念混起来。</p>
+
+    <h2><span class="h2num">06</span>代码之外的两件事</h2>
+
+    <p>这段代码本身没什么特别的，真正值得留下的是两条：</p>
+
+    <ol>
+      <li><strong>拟合类算法，必须输出"拟合得好不好"，而不只是"结果是什么"。</strong>
+        我顺手算的 <code>R_outer</code> / <code>R_inner</code> 本来只是想让输出好看点，
+        结果它们成了唯一能暴露问题的地方。如果我只返回 <code>r</code>，
+        这个 79.678 会被我原样写进报告。</li>
+      <li><strong>数字越精确，越要问它的量级对不对。</strong>
+        0.6 毫米的残差很精确，但它精确到了不该精确的地方；
+        159 米的直径也很精确，但它的量级回答不了"最小转弯"这个问题。
+        两个数字都在提醒同一件事：<em>先看量级，再看精度</em>。</li>
+    </ol>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2025 年 9 月 8 日的一段便签，代码与输出为当时的原文（含真实的返回 JSON）。
+        原始场景是给一条车辆轨迹算转弯半径。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>补上了第 04、05 两节。原始便签里只有代码和一行结果 JSON，
+        当时我觉得"跑通了"就收工了——重读时才发现那两个数字一直在报警。</dd>
+    </dl>
+  </div>
+
+  <aside class="notes">
+    <div class="notes__inner">
+      <div class="notes__toc"></div>
+      <p class="marginnote" style="margin-top:20px">
+        <b>为什么用第一个点当原点。</b>
+        局部投影只在一个小范围内准确（几公里内误差可以忽略）。
+        挑第一个点只是为了简单，换成所有点的平均值会更居中，效果差别不大。
+      </p>
+      <p class="marginnote">
+        <b>111320 的来历。</b>
+        严格算法要用 WGS84 椭球参数展开成纬度的高阶多项式。
+        工程上取 111320 是常用的近似，在几十公里的尺度内误差可以接受。
+      </p>
+      <p class="marginnote">
+        <b>R_outer / R_inner 只能抓"点不共圆"。</b>
+        它抓不到系统性的错误——比如整段数据整体偏移了 10 米，
+        那十二个点依然完美共圆，残差还是接近零。所以它是个必要条件，不是充分条件。
+      </p>
+    </div>
+  </aside>
+</div>

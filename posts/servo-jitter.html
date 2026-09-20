@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>舵机抖动的三种可能 — 余量 MARGIN</title>
+<meta name="description" content="同一个角度指令，舵机却在原地发抖。按电源、信号、机械的顺序排查，最后一种最意外：抖的不是舵机，是支架。">
+<link rel="canonical" href="https://margin.pages.dev/posts/servo-jitter.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="舵机抖动的三种可能 — 余量 MARGIN">
+<meta property="og:description" content="抖的不是舵机，是支架。以及一个 0.5 度的死区能省掉多少麻烦。">
+<meta property="og:url" content="https://margin.pages.dev/posts/servo-jitter.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">硬件 · No.06 · PWM / 云台</div>
+      <h1>舵机抖动的三种可能</h1>
+      <p class="standfirst">发给它的是同一个角度，一遍又一遍，它却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，最后一种最意外。</p>
+      <div class="byline">
+        <span><time datetime="2026-08-05">2026.08.05</time></span>
+        <span class="dot"></span><span data-readtime>约 9 分钟</span>
+        <span class="dot"></span><span>2,090 字</span>
+        <span class="dot"></span><span>云台二自由度 · 数字舵机 ×2</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/hardware.html">硬件</a>
+        <a class="tag" href="/tags/debug.html">调试</a></div>
+    </header>
+
+        <div class="wrap article-body">
+          <div class="prose">
+            <p class="first">抖动这种故障有个特点：它看起来很小，但它会让你怀疑整个系统的精度。
+              我的云台在收到固定的 <code>JointState</code> 指令时，两个轴都在微小地颤，
+              幅度大概 0.3° 到 0.5°，肉眼勉强可见，但装在云台上的激光雷达把这件事放大了——
+              点云在原地"呼吸"，测距值来回跳 ±12 mm。</p>
+
+            <p>舵机抖动的成因，按我这些年遇到的频率排序，基本就三类：<strong>电源、信号、机械</strong>。
+              按这个顺序查，省时间，因为越靠前越好验证。</p>
+
+            <h2><span class="h2num">01</span>电源：最好排除，先做</h2>
+
+            <p>舵机在堵转和启动瞬间会拉很大的电流。一颗常见的数字舵机，静止时几十毫安，
+              转动瞬间可以拉到 800 mA 以上。如果它和逻辑电路共用一路电源，这个尖峰会把 3V3 拉下去——
+              这件事我在<mark>上一篇掉线排查里已经吃过一次亏</mark>，所以这次第一件事就是查它。</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>测量 · 舵机供电 5 V 支路 · 电流钳</span></div>
+    <pre>静止保持       42 mA
+    收到指令瞬间   <span class="n">760</span> mA（峰值，约 15 ms）
+    回落           55 mA
+    5 V 跌落       5.02 V → 4.71 V   <span class="c">// 0.31 V，可接受</span>
+    3V3 跌落       3.298 V → 3.294 V <span class="c">// 几乎没动</span></pre>
+            </div>
+
+            <p>0.31 V 的跌落不至于让舵机复位，逻辑侧更是纹丝不动。<strong>电源排除。</strong>
+              不过为了后面不再反复，我还是顺手补了 220 µF 的电容，把跌落压到 0.11 V——这不解决抖动，但让我心里踏实。</p>
+
+            <h2><span class="h2num">02</span>信号：示波器不会说谎</h2>
+
+            <p>第二类怀疑是 PWM 本身不稳。舵机靠脉宽定位，典型的 50 Hz、0.5–2.5 ms 映射 0–180°。
+              如果脉宽在抖，舵机就会跟着抖，这是最直接的因果。</p>
+
+            <p>我把示波器挂在信号线上，让系统持续发送同一个角度指令，测了 200 个周期：</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>测量 · 脉宽 1.500 ms（对应 90°）· 200 次采样</span></div>
+    <pre>平均     <span class="n">1.5002</span> ms
+    标准差   <span class="n">0.0031</span> ms  <span class="c">// ±3.1 µs</span>
+    极值     1.492 / 1.508 ms
+
+    换算成角度：±3.1 µs ÷ 11.1 µs/° ≈ <span class="n">±0.28°</span></pre>
+            </div>
+
+            <p>找到嫌疑了。±3.1 µs 的脉宽抖动，换算过来正好是 ±0.28°，和观察到的抖动幅度吻合。</p>
+
+            <p>但这只是"吻合"，不是"证明"。我做了个对照实验：把信号源从 MCU 的硬件 PWM 换成一台信号发生器，
+              输出纯净的 1.500 ms 方波——<strong>舵机照抖</strong>。</p>
+
+            <blockquote>
+              <p>这一下把信号这条线也砍了一半：脉宽抖动确实存在，但它不是抖动的<em>原因</em>，
+                最多是放大器。干净的 1.500 ms 照样抖，说明舵机自己不想安静。</p>
+            </blockquote>
+
+            <h2><span class="h2num">03</span>机械：最意外的一种</h2>
+
+            <p>前两类都排得差不多的时候，我做了个一直没做的动作：<strong>用手按住云台支架</strong>。</p>
+
+            <p>不抖了。</p>
+
+            <p>松开，继续抖。再按住，又不抖。这个实验非常土，但它两秒钟就告诉了我真相：
+              抖的不是舵机，是<em>整个结构在共振</em>。舵机内部的 PID 在不停地纠正一个微小的位置误差，
+              纠正产生的力传递给支架，支架的形变又反馈成新的位置误差，形成闭环。
+              系统在一个它自己制造的正反馈里循环。</p>
+
+            <figure class="figure">
+              <svg viewBox="0 0 800 300" role="img" aria-label="抖动闭环示意">
+                <g font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text-3)">
+                  <rect x="60" y="90" width="150" height="66" fill="none" stroke-width="1.5" style="stroke:var(--text-3)"/>
+                  <text x="135" y="127" text-anchor="middle">位置误差</text>
+                  <rect x="325" y="90" width="150" height="66" fill="none" stroke-width="1.5" style="stroke:var(--text-3)"/>
+                  <text x="400" y="127" text-anchor="middle">舵机出力</text>
+                  <rect x="590" y="90" width="150" height="66" fill="none" stroke-width="1.5" style="stroke:var(--text-3)"/>
+                  <text x="665" y="127" text-anchor="middle">支架形变</text>
+                </g>
+                <g stroke-width="1.8" fill="none" marker-end="url(#ar)" style="stroke:var(--amber)">
+                  <defs>
+                    <marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                      <path d="M0 0 L8 3 L0 6 z" style="fill:var(--amber)"/>
+                    </marker>
+                  </defs>
+                  <path d="M212 123 H320"/>
+                  <path d="M477 123 H585"/>
+                  <path d="M665 158 V206 H135 V158"/>
+                </g>
+                <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".65" style="fill:var(--text-3)">
+                  <text x="240" y="115">放大</text>
+                  <text x="505" y="115">传递</text>
+                  <text x="360" y="222">反馈（延迟 &lt; 1 ms，来不及衰减）</text>
+                </g>
+                <rect x="60" y="240" width="680" height="1" fill-opacity=".2" style="fill:var(--text-3)"/>
+                <text x="60" y="272" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--amber)">
+                  结论：刚度不足时，控制环路把结构形变当成了位置误差 → 自激
+                </text>
+              </svg>
+              <figcaption><b>图 01</b> — 自激闭环。刚度是这里唯一的变量，把支架固定住等于把这条环路断开。</figcaption>
+            </figure>
+
+            <p>找到根因之后，修法就很直接了，一共三步，按效果排序：</p>
+
+            <ol>
+              <li><strong>加刚度。</strong> 支架从 2 mm 亚克力换成 3 mm 铝板，并在悬臂处补一颗 M3 螺丝。
+                这一条解决了 80% 的问题，肉眼看不出抖了。</li>
+              <li><strong>加死区。</strong> 在固件里判断：目标角度与上一次指令相差小于 0.5° 时，
+                <em>不发送</em>。舵机不必为一个它到不了的位置反复纠正。</li>
+              <li><strong>降指令频率。</strong> 原本 50 Hz 的指令刷新改成 20 Hz。舵机的控制周期本身也就 20 Hz 上下，
+                发得更快只是让它在两次有效动作之间多抖几下。</li>
+            </ol>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>firmware · 死区判断</span></div>
+    <pre><span class="k">static</span> <span class="k">float</span> last_deg[<span class="n">2</span>] = {<span class="n">0</span>};
+
+    <span class="k">void</span> write_servo(<span class="k">int</span> id, <span class="k">float</span> deg) {
+        <span class="c">// 小于 0.5° 的变化不值得发一次指令：</span>
+        <span class="c">// 舵机到不了，只会让它在目标附近来回纠正</span>
+        <span class="k">if</span> (fabsf(deg - last_deg[id]) &lt; <span class="n">0.5f</span>) <span class="k">return</span>;
+        last_deg[id] = deg;
+        servo_set_angle(id, deg);
+    }</pre>
+            </div>
+
+            <h2><span class="h2num">04</span>修完之后的一点想法</h2>
+
+            <p>这次最花时间的不是解决问题，是<strong>承认问题不在我熟悉的地方</strong>。
+              我是写固件的，遇到抖动本能地去看 PWM 波形、去看定时器精度，那是我擅长也舒服的区域。
+              而真正的答案在我手能摸到的地方——一块太软的塑料板。</p>
+
+            <p>所以我给自己的排查顺序加了一条：<em>在打开示波器之前，先用手摸一遍结构</em>。
+              听起来不专业，但它最快。</p>
+
+            <dl class="revision">
+              <dt>2026.08.20 补充</dt>
+              <dd>有同行指出数字舵机的 PID 参数在部分型号上可通过串口调整，降低 P 增益也能缓解自激。
+                我手上这两颗不支持，没有实测，仅作记录。</dd>
+              <dt>2026.08.06 修订</dt>
+              <dd>更正：初稿写"脉宽抖动 ±3.1 µs 是主因"，对照实验后应降级为次要因素，正文已改。</dd>
+            </dl>
+          </div>
+
+          <aside class="notes">
+            <div class="notes__inner">
+              <div class="notes__toc"></div>
+              <p class="marginnote" style="margin-top:20px">
+                <b>11.1 µs/° 怎么来的。</b> 2.0 ms 的脉宽行程对应 180°，
+                2000 µs ÷ 180° ≈ 11.1 µs/°。换算时别忘了实际行程可能是 0.5–2.5 ms 之外的范围，先量一下自己的舵机。
+              </p>
+              <p class="marginnote">
+                <b>信号发生器对照实验</b>是我觉得最值得复用的一次操作。每当怀疑"信号不干净"，
+                就换一个公认干净的信号源——两分钟就能把因果和相关性分开。
+              </p>
+              <p class="marginnote">
+                <b>死区 0.5°</b> 是我这台设备的经验值，取决于齿轮间隙。
+                间隙大的舵机可以放宽到 1°，间隙小的（金属齿、带编码器）0.2° 也行。
+              </p>
+            </div>
+          </aside>
+        </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/workbench.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">我的工作台：一张桌上的十四件东西</span>
+      </a>
+      <a href="/posts/micro-ros-agent.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">micro_ros_agent 装不上的三个原因</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/boot-log.html">
+          <span class="relitem__meta">09.20 · 固件</span>
+          <span class="relitem__title">读懂 ESP32 的启动日志</span>
+          <span class="relitem__sum">复位原因、最大连续内存块、分区地址账本——开机日志里最该看的四个地方。</span>
+        </a>
+        <a class="relitem" href="/posts/serial-log-day.html">
+          <span class="relitem__meta">09.14 · 调试笔记</span>
+          <span class="relitem__title">串口日志里的一天</span>
+          <span class="relitem__sum">设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上，才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。</span>
+        </a>
+        <a class="relitem" href="/posts/rotary-encoder-ui.html">
+          <span class="relitem__meta">05.28 · 设计</span>
+          <span class="relitem__title">两个输入，一个状态机</span>
+          <span class="relitem__sum">连续量用于调整，离散量用于切换——以及验收标准为什么值得写两条。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="servo-jitter" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一次好得可疑的拟合 — 余量 MARGIN</title>
+<meta name="description" content="用十二个 GPS 点拟合车辆转弯半径，最大偏差只有 0.6 毫米——比设备本身的精度高出一千倍。这不是好消息。">
+<link rel="canonical" href="https://margin.pages.dev/posts/suspicious-fit.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="一次好得可疑的拟合 — 余量 MARGIN">
+<meta property="og:description" content="拟合结果好得不合理的时候，该怀疑的不是算法。">
+<meta property="og:url" content="https://margin.pages.dev/posts/suspicious-fit.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">数据 · No.01 · 最小二乘 / GPS</div>
+      <h1>一次好得可疑的拟合</h1>
+      <p class="standfirst">我需要一个数字：车辆的转弯半径。而手上只有一条 GPS 轨迹。代码跑通了，但看着那组输出，我停了下来——它好得不像是真的。</p>
+      <div class="byline">
+        <span><time datetime="2025-09-08">2025.09.08</time></span>
+        <span class="dot"></span><span data-readtime>约 8 分钟</span>
+        <span class="dot"></span><span>2,795 字</span>
+        <span class="dot"></span><span>Python · numpy · circle_fit</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/data.html">数据</a>
+        <a class="tag" href="/tags/python.html">Python</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">我需要一个数字：车辆的转弯半径。指标里写着它，验收时要交它，
+          而手上只有一条 GPS 轨迹——一堆经纬度点。</p>
+
+        <p>思路很直接：如果车在绕一个稳定的圆走，那这些点就应该落在同一个圆上。
+          三点定圆，十二点拟合一个误差最小的圆，圆心到点的距离就是半径。</p>
+
+        <p>代码跑通了，结果也出来了。但看着那组数字，我停了下来——
+          <mark>它好得不像是真的</mark>。</p>
+
+        <h2><span class="h2num">01</span>第一步：把经纬度变成米</h2>
+
+        <p>拟合圆是平面几何，而经纬度是球面上的角度。所以先要做一个局部投影：
+          选第一个点当原点，把后面每个点的经纬度差换算成米。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>convert_to_relative_coordinates</span></div>
+    <pre>lat0, lon0 = points_lonlat[0]
+    for lat, lon in points_lonlat:
+        y = (lat - lat0) * 111320.0
+        x = (lon - lon0) * 111320.0 * np.cos(np.radians(lat0))
+        rel.append((x, y))</pre>
+        </div>
+
+        <p>两个常数值得解释一下，因为它们是这类换算里最容易写错的地方：</p>
+
+        <ul>
+          <li><code>111320</code> 是<strong>纬度方向</strong>上 1 度对应的米数（地球子午线的平均曲率）。
+            这个值随纬度变化很小，工程上当成常数没问题。</li>
+          <li>经度方向要再乘一个 <code>cos(纬度)</code>。因为经线在两极收敛，同样 1 度经度，
+            在赤道上是 111 公里，在北纬 40 度只剩 85 公里。
+            <em>忘了这个余弦，是你算出来的形状被横向拉长</em>——圆会变成椭圆。</li>
+        </ul>
+
+        <p>这里还有一个必须做的防御：<strong>如果所有点都是同一个坐标</strong>，
+          后面拟合会得到一个无意义的圆心，甚至除以零。所以加一句全等判断，
+          直接返回失败而不是硬算出一个结果。</p>
+
+        <h2><span class="h2num">02</span>第二步：拟合一个圆</h2>
+
+        <p>两点连线的中垂线能定圆心，三点就能确定唯一的圆。但真实数据点不共圆，
+          所以要用最小二乘——找那个"让所有点到圆周距离平方和最小"的圆心和半径。</p>
+
+        <p>我用的是 <code>circle_fit</code> 里的 <code>hyper_fit</code>，
+          它的求解过程对噪声和外点比简单的代数法稳一些：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>fit_circle</span></div>
+    <pre>def fit_circle(points_xy):
+        try:
+            xc, yc, r, _ = hyper_fit(points_xy)
+            if np.isnan(xc) or np.isnan(yc) or np.isnan(r):
+                logging.error(f"拟合圆结果异常: xc={xc}, yc={yc}, r={r}")
+                return None, None, None
+            return float(xc), float(yc), float(r)
+        except Exception as e:
+            logging.error(f"拟合圆失败: {e}")
+            return None, None, None</pre>
+        </div>
+
+        <p>结果对不对，不能只看 <code>r</code> 这一个数。所以我同时算了另外两个值：
+          <strong>所有点到圆心的最大距离</strong>和<strong>最小距离</strong>。
+          理想情况下它们都应该等于 <code>r</code>；它们和 <code>r</code> 的差距，
+          就是这组点"到底圆不圆"的度量。</p>
+
+        <h2><span class="h2num">03</span>结果</h2>
+
+        <p>十二个点，输出如下：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>result.json</span></div>
+    <pre>{
+      "xc": -76.96346957340506,
+      "yc": -20.62260572804938,
+      "r": 79.67831662915245,
+      "R_outer": 79.678911761091,
+      "R_inner": 79.67796555660075,
+      "n_points": 12,
+      "ok": true
+    }</pre>
+        </div>
+
+        <p>半径 <code>r = 79.678316</code> 米。翻译成直径，大约 159.4 米。</p>
+
+        <p>然后我把三个数字放在一起看，发现了问题：</p>
+
+        <table>
+          <thead>
+            <tr><th>量</th><th>值</th><th>与 r 的偏差</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>拟合半径 r</td><td>79.678316 m</td><td>—</td></tr>
+            <tr><td>最远点 R_outer</td><td>79.678912 m</td><td>+0.6 毫米</td></tr>
+            <tr><td>最近点 R_inner</td><td>79.677966 m</td><td>−0.35 毫米</td></tr>
+          </tbody>
+        </table>
+
+        <p><strong>十二个点，最大偏差 0.6 毫米。</strong></p>
+
+        <h2><span class="h2num">04</span>好得可疑</h2>
+
+        <p>如果这是一个机械加工件的检测报告，0.6 毫米的圆度误差说明工艺很好。
+          但这是一条<em>车辆 GPS 轨迹</em>。</p>
+
+        <p>民用 GPS 不开差分的时候，水平定位误差在<strong>米级</strong>；
+          就算用上 RTK 差分，稳定状态也在<strong>厘米级</strong>。
+          把坐标换算成米、再拟合，残差应该至少是厘米量级——
+          而实际残差比这还小了三个数量级。</p>
+
+        <p>换句话说：<mark>这组数据的精度，比设备能提供的精度高出一千倍</mark>。</p>
+
+        <p>能解释这个现象的原因，我想得到三种：</p>
+
+        <ul>
+          <li><strong>这些点不是实测的</strong>，而是某个环节按圆生成的（比如为了打通流程先造的测试数据）。</li>
+          <li><strong>点在进入这段计算之前被处理过</strong>——比如已经做过平滑、重采样，
+            把噪声滤掉了。但滤波会让点趋近于光滑曲线，也不至于到亚毫米。</li>
+          <li><strong>我拿到的列表不是真的十二条不同记录</strong>，而是少量点重复填充的。</li>
+        </ul>
+
+        <p>我没有结论，因为当时我没有回去核对原始数据是怎么来的——这是我的疏忽。
+          但这次经历给我留下了一条比代码更有用的规则。</p>
+
+        <blockquote>
+          <p>拟合出来的精度，永远不可能超过输入数据的精度。
+            所以当残差<em>远小于</em>你预期的时候，那不是在证明"算得准"，
+            而是说明"这组数据不是你想象的那样"。</p>
+        </blockquote>
+
+        <h2><span class="h2num">05</span>顺带说说那个 159 米</h2>
+
+        <p>还有一个数字需要警惕：直径 159.4 米。</p>
+
+        <p>车辆的"最小转弯直径"指的是：方向盘打到底、低速稳定行驶时，
+          车身外缘画出的那个圆。这个量级通常是<strong>十几米</strong>——
+          因为它由轴距和最大转向角决定，和车本身一样是个小尺度量。</p>
+
+        <p>159 米远大于此。所以这组点测的几乎肯定不是"最小转弯直径"，
+          而是车辆在某次绕行中走出的一个大弧。这两件事常被混为一谈，
+          但它们回答的是完全不同的问题：</p>
+
+        <table>
+          <thead>
+            <tr><th>指标</th><th>在问什么</th><th>量级</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>最小转弯半径 / 直径</td><td>车本身能拐多急</td><td>米</td></tr>
+            <tr><td>实际轨迹半径</td><td>这次它拐了多急</td><td>取决于当时怎么开</td></tr>
+          </tbody>
+        </table>
+
+        <p>如果验收表上写的是前者，那你不能拿后者的数据去填。
+          我在便签里给这段起的标题就是"转弯直径"——
+          现在回头看，这个命名本身就在诱导我把两个概念混起来。</p>
+
+        <h2><span class="h2num">06</span>代码之外的两件事</h2>
+
+        <p>这段代码本身没什么特别的，真正值得留下的是两条：</p>
+
+        <ol>
+          <li><strong>拟合类算法，必须输出"拟合得好不好"，而不只是"结果是什么"。</strong>
+            我顺手算的 <code>R_outer</code> / <code>R_inner</code> 本来只是想让输出好看点，
+            结果它们成了唯一能暴露问题的地方。如果我只返回 <code>r</code>，
+            这个 79.678 会被我原样写进报告。</li>
+          <li><strong>数字越精确，越要问它的量级对不对。</strong>
+            0.6 毫米的残差很精确，但它精确到了不该精确的地方；
+            159 米的直径也很精确，但它的量级回答不了"最小转弯"这个问题。
+            两个数字都在提醒同一件事：<em>先看量级，再看精度</em>。</li>
+        </ol>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自 2025 年 9 月 8 日的一段便签，代码与输出为当时的原文（含真实的返回 JSON）。
+            原始场景是给一条车辆轨迹算转弯半径。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>补上了第 04、05 两节。原始便签里只有代码和一行结果 JSON，
+            当时我觉得"跑通了"就收工了——重读时才发现那两个数字一直在报警。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么用第一个点当原点。</b>
+            局部投影只在一个小范围内准确（几公里内误差可以忽略）。
+            挑第一个点只是为了简单，换成所有点的平均值会更居中，效果差别不大。
+          </p>
+          <p class="marginnote">
+            <b>111320 的来历。</b>
+            严格算法要用 WGS84 椭球参数展开成纬度的高阶多项式。
+            工程上取 111320 是常用的近似，在几十公里的尺度内误差可以接受。
+          </p>
+          <p class="marginnote">
+            <b>R_outer / R_inner 只能抓"点不共圆"。</b>
+            它抓不到系统性的错误——比如整段数据整体偏移了 10 米，
+            那十二个点依然完美共圆，残差还是接近零。所以它是个必要条件，不是充分条件。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/duplicate-handler.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">我改了那个函数，但跑的不是它</span>
+      </a>
+    </nav>
+
+    <section class="wrap related" hidden>
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="suspicious-fit" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

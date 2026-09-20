@@ -1,0 +1,223 @@
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">RViz 里激光点云画得好好的，我随手把那个终端关掉了，点云还在。</p>
+
+    <p>这不对。RViz 里的东西都有来源：要么来自某个正在跑的节点，要么来自它自己缓存的一份。
+      我把发布者杀了，画面却纹丝不动——说明我看到的那份数据，根本不是我以为的那个发布者给的。</p>
+
+    <p>顺着这条线查下去，我撞上了 ROS 2 里最容易忽略、也最容易把人困住的一块：
+      <strong>QoS（服务质量策略）</strong>。它造成的问题有个共同特征——
+      <mark>数据明明在那儿，你的订阅者就是收不到，而且全程几乎不报错</mark>。</p>
+
+    <h2><span class="h2num">01</span>先出现的怪事：能看到，却用不上</h2>
+
+    <p>更早的时候就有征兆。RViz 一直报某个 frame 不存在，我以为是 TF 树没建好，
+      于是直接去翻话题：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>终端</span></div>
+<pre>$ ros2 topic echo /tf_static --once
+transforms:
+- header:
+    stamp:
+      sec: 0
+      nanosec: 0
+    frame_id: base_link
+  child_frame_id: laser_frame
+  transform:
+    translation: {x: 0.0, y: 0.0, z: 0.08}
+    rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+---</pre>
+    </div>
+
+    <p>内容完全正确：<code>base_link</code> → <code>laser_frame</code>，z 方向抬高 8 厘米，
+      和我需要的变换一模一样。话题里<strong>确实有这条消息</strong>。</p>
+
+    <p>但 RViz 收不到，<code>tf2_echo base_link laser_frame</code> 也拿不到。
+      所以问题不是「数据对不对」，而是「数据有没有被送到」。</p>
+
+    <h2><span class="h2num">02</span>答案藏在一行被我跳过的 WARN 里</h2>
+
+    <p>回头翻启动日志，找到了它：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>rviz2 启动日志</span></div>
+<pre>[WARN] [...] New publisher discovered on topic '/tf_static',
+       offering incompatible QoS. No messages will be sent to it.
+       Last incompatible policy: DURABILITY_QOS_POLICY</pre>
+    </div>
+
+    <p>这行警告说得很直白，只是我当时没读懂：「发现了一个新的发布者，但它提供的 QoS 不兼容，
+      <strong>不会向它发送任何消息</strong>。不匹配的策略是 DURABILITY。」</p>
+
+    <p>这里的措辞有点绕，但结果是清楚的：RViz 不是「没收到」，而是<strong>主动拒绝接收</strong>。</p>
+
+    <h2><span class="h2num">03</span>Durability：这两台设备对「历史」的看法不同</h2>
+
+    <p>Durability（持久性）解决的是一个问题：<em>订阅者来晚了，还能不能拿到之前发过的消息？</em></p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>策略</th>
+          <th>含义</th>
+          <th>谁在用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>volatile</code></td>
+          <td>只收「我订阅之后」发出的消息，不看历史</td>
+          <td>RViz、tf2_echo 的默认值</td>
+        </tr>
+        <tr>
+          <td><code>transient_local</code></td>
+          <td>消息会「存」在话题里，后来的订阅者能补收到</td>
+          <td>我那个雷达驱动发布的 <code>/tf_static</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>ROS 2 的规则很硬：<strong>发布者和订阅者的 Durability 必须完全一致，才允许通信</strong>。
+      一深一浅，就不匹配，消息根本不会发出去。所以哪怕话题里躺着那条变换，
+      RViz 的 TF 缓存里也永远不会有它。</p>
+
+    <h2><span class="h2num">04</span>第二个因素：发布者「打一枪就走了」</h2>
+
+    <p>只到这一步还不够——我又去量了一下那个话题的发布频率，发现了第二件事：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>频率与时间戳</span></div>
+<pre>average rate: 0.35        <span class="c"># 大约 3 秒一次</span>
+stamp: sec: 0, nanosec: 0 <span class="c"># 时间戳是 0</span></pre>
+    </div>
+
+    <p>0.35 Hz，而且时间戳是 <code>0</code>。这两个特征凑在一起通常意味着：
+      发布者并不是一个常驻节点，而是<strong>某个驱动在启动时发了一次静态变换，然后就退出了</strong>
+      （或者进了休眠）。</p>
+
+    <p>静态变换按定义只发一次就够了——前提是订阅者用 <code>transient_local</code> 能补收到。
+      可一旦遇到 <code>volatile</code> 的订阅者，这次发布就彻底错过了：<em>发布时你还没来，你来时它已经走了</em>。</p>
+
+    <p>而 RViz 是在驱动之后才启动的。两件事凑齐，就成了死局。</p>
+
+    <h2><span class="h2num">05</span>为什么手敲一行命令就好了</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>手动发布静态变换</span></div>
+<pre>ros2 run tf2_ros static_transform_publisher \
+  --x 0 --y 0 --z 0.08 --roll 0 --pitch 0 --yaw 0 \
+  --frame-id base_link --child-frame-id laser_frame</pre>
+    </div>
+
+    <p>这行命令一跑，RViz 立刻正常。它成功的原因，正好是前面两个失败原因的镜像：</p>
+
+    <ul>
+      <li><strong>它用默认的 <code>volatile</code> 策略</strong>——和 RViz、<code>tf2_echo</code> 完全匹配，
+        「语言」相通，消息才发得出去。</li>
+      <li><strong>它一直在运行</strong>，大约每秒重发一次。无论 RViz 什么时候打开，都能等到下一次推送，
+        不存在「来晚了」的问题。</li>
+    </ul>
+
+    <p>把两条路并排放一下，问题就非常清楚了：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>驱动发的 <code>/tf_static</code></th>
+          <th>手动命令</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Durability</td>
+          <td><code>transient_local</code> → 不匹配</td>
+          <td><code>volatile</code> → 匹配</td>
+        </tr>
+        <tr>
+          <td>发布行为</td>
+          <td>0.35 Hz，发完就走</td>
+          <td>持续约 1 Hz</td>
+        </tr>
+        <tr>
+          <td>RViz 能收到吗</td>
+          <td>拒绝接收</td>
+          <td>正常接收</td>
+        </tr>
+        <tr>
+          <td>结果</td>
+          <td>frame does not exist</td>
+          <td>点云正常显示</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="h2num">06</span>如果一定要用原来那个发布者</h2>
+
+    <p>把订阅端的 QoS 调成 <code>transient_local</code>，就能和它对上：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>让订阅端去迁就</span></div>
+<pre>ros2 run tf2_ros tf2_echo base_link laser_frame --qos-durability transient_local</pre>
+    </div>
+
+    <p>RViz 也可以在话题配置里把 Durability 改掉。但如果那个发布者是别人写好的驱动，
+      改自己这边更省事。反过来，如果两边都能改，
+      <strong>标准做法还是用 <code>static_transform_publisher</code> 持续发布</strong>——
+      它对任何订阅者都友好，不要求对方懂你的策略。</p>
+
+    <blockquote>
+      <p>一个判断规则：静态变换只用发一次，是建立在「订阅者能补收到历史」这个前提上的。
+        只要链路上有任何一个订阅者是 <code>volatile</code>，这个前提就不成立。
+        与其去猜别人用什么策略，不如老老实实持续发。</p>
+    </blockquote>
+
+    <h2><span class="h2num">07</span>这件事教我的</h2>
+
+    <ul>
+      <li><strong>「话题里有消息」和「我收得到」是两件事。</strong>
+        <code>ros2 topic echo</code> 能用，只证明<em>它</em>能和发布者对上，
+        不证明 RViz 或你的代码也能。这是我当时最想不通的地方。</li>
+      <li><strong>WARN 要读，尤其是提到 QoS 的。</strong>
+        那行 <code>offering incompatible QoS</code> 安静地躺在启动日志里，
+        它其实已经把答案说完了。我跳过了它，于是多花了几个小时。</li>
+      <li><strong>时间戳是 0 的静态变换，是个信号。</strong>
+        它说明这条消息被设计成「发一次就够」。看到这种设计，
+        就要立刻问一句：那我的订阅者能不能补收到？</li>
+    </ul>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月 30 日的排查记录。当时的现象是停掉手动发布的 TF 之后，
+        点云画面依旧存在——顺着这条线才把 QoS 不匹配的问题挖出来。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>把「0.35 Hz + 时间戳为 0」这两条线索单独提出来讲。原始笔记里它们混在排查过程里，
+        其实它们是判断「这个发布者会不会自己消失」最快的依据。</dd>
+    </dl>
+  </div>
+
+  <aside class="notes">
+    <div class="notes__inner">
+      <div class="notes__toc"></div>
+      <p class="marginnote" style="margin-top:20px">
+        <b>为什么 RViz 要拒绝而不是忽略。</b>
+        如果允许不匹配的策略通信，语义就乱了：一个期待「随时能补收历史」的订阅者，
+        配上「只发一次」的发布者，会得到时有时无的数据——那比直接报错更难查。
+        ROS 2 选择硬性拒绝，代价是报错信息不够直白。
+      </p>
+      <p class="marginnote">
+        <b>查看话题的 QoS。</b>
+        <code>ros2 topic info /tf_static --verbose</code> 会把发布者和订阅者各自的
+        QoS 策略列出来，两边对不上一眼就能看见。我当时不知道有这个命令，
+        是靠猜和试走过来的。
+      </p>
+      <p class="marginnote">
+        <b>tf_static 与 tf 的区别。</b>
+        <code>/tf_static</code>（注意有横线）专门放不变的变换，
+        规范上就应该用 <code>transient_local</code>；<code>/tf</code> 放动态变换，用 <code>volatile</code>。
+        我遇到的问题，本质是「用了对的策略，却遇到了不懂这个策略的订阅者」。
+      </p>
+    </div>
+  </aside>
+</div>

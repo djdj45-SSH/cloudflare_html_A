@@ -1,0 +1,55 @@
+<svg viewBox="0 0 900 560" role="img" aria-label="ESP32 4MB Flash 的分区地址账本：nvs、otadata、app0、app1、spiffs、coredump 六段的起止地址与大小">
+  <!-- 网格 -->
+  <g stroke-width="1" stroke-opacity=".5" style="stroke:var(--line-2)">
+    <path d="M90 90H860M90 160H860M90 230H860M90 300H860M90 370H860M90 440H860"/>
+  </g>
+  <!-- 地址轴刻度 -->
+  <g stroke-width="1" style="stroke:var(--line-3)">
+    <path d="M90 480V488M282 480V488M473 480V488M665 480V488M857 480V488"/>
+  </g>
+  <path d="M90 480H857" stroke-width="1.4" fill="none" style="stroke:var(--line-3)"/>
+  <g font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-3)">
+    <text x="90" y="512">0x000000</text>
+    <text x="270" y="512">1M</text>
+    <text x="461" y="512">2M</text>
+    <text x="653" y="512">3M</text>
+    <text x="820" y="512">4M</text>
+  </g>
+
+  <text x="90" y="48" font-family="ui-monospace,Consolas,monospace" font-size="15" letter-spacing="2" style="fill:var(--phos)">FLASH 4 MB · 分区账本</text>
+  <text x="90" y="72" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text-3)">每一段都从上一段结束的地方开始，直到最后一个字节 —— 一个不漏</text>
+
+  <!-- nvs 20K -->
+  <text x="86" y="112" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-2)">nvs</text>
+  <rect x="90" y="98" width="6" height="22" style="fill:var(--text-3)"/>
+  <text x="106" y="114" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text-3)">0x009000 · 20 KB</text>
+
+  <!-- otadata 8K -->
+  <text x="86" y="182" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-2)">otadata</text>
+  <rect x="160" y="168" width="6" height="22" style="fill:var(--text-3)"/>
+  <text x="176" y="184" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text-3)">0x00E000 · 8 KB</text>
+
+  <!-- app0 1280K -->
+  <text x="86" y="252" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-2)">app0</text>
+  <rect x="108" y="238" width="237" height="22" style="fill:var(--phos)"/>
+  <text x="120" y="254" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--bg)">0x010000 · 1280 KB · OTA_0</text>
+
+  <!-- app1 1280K -->
+  <text x="86" y="322" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-2)">app1</text>
+  <rect x="345" y="308" width="237" height="22" fill-opacity=".55" style="fill:var(--phos)"/>
+  <text x="357" y="324" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text)">0x150000 · 1280 KB · OTA_1</text>
+
+  <!-- spiffs 1408K -->
+  <text x="86" y="392" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-2)">spiffs</text>
+  <rect x="582" y="378" width="261" height="22" style="fill:var(--amber)"/>
+  <text x="594" y="394" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--bg)">0x290000 · 1408 KB</text>
+
+  <!-- coredump 64K -->
+  <text x="86" y="462" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--text-2)">coredump</text>
+  <rect x="843" y="448" width="14" height="22" style="fill:var(--cyan)"/>
+  <text x="836" y="440" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--cyan)">0x3F0000 · 64 KB</text>
+
+  <!-- 结论行 -->
+  <path d="M90 536H857" stroke-width="1" fill="none" style="stroke:var(--line)"/>
+  <text x="90" y="552" font-family="ui-monospace,Consolas,monospace" font-size="13" style="fill:var(--amber)">0x3F0000 + 64 KB = 0x400000 —— 正好是 4 MB，一个字节都没浪费</text>
+</svg>

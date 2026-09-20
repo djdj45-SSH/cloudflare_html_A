@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>8 GB 显存里塞一个 27B 模型 — 余量 MARGIN</title>
+<meta name="description" content="加载失败、参数和程序打架、上下文越长越慢——这三个问题都能在一份 llama-server 日志里读到答案。">
+<link rel="canonical" href="https://margin.pages.dev/posts/local-27b-on-8gb.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="8 GB 显存里塞一个 27B 模型 — 余量 MARGIN">
+<meta property="og:description" content="生成速度从 20 tokens/s 掉到 8，衰减的六成不是故障。">
+<meta property="og:url" content="https://margin.pages.dev/posts/local-27b-on-8gb.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">工具链 · No.14 · llama.cpp / 本地推理</div>
+      <h1>8 GB 显存里塞一个 27B 模型</h1>
+      <p class="standfirst">8 GB 显存想跑 27B 模型，按参数量算不该够。除非量化到三值——那 27B 只需要 5.3 GB，数字上刚好塞得进去。</p>
+      <div class="byline">
+        <span><time datetime="2026-09-19">2026.09.19</time></span>
+        <span class="dot"></span><span data-readtime>约 9 分钟</span>
+        <span class="dot"></span><span>3,170 字</span>
+        <span class="dot"></span><span>Ryzen 7 7735H · RTX 4060 8GB · llama.cpp</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/llm.html">大模型</a>
+        <a class="tag" href="/tags/localai.html">本地推理</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">我手上有一台 8 GB 显存的笔记本，想在本地跑一个 27B 的模型。</p>
+
+        <p>按照参数量估算，这个规模即使做激进量化，通常也要十几 GB 显存——8 GB 看起来不该够。
+          但有一个例外：如果量化到<strong>三值</strong>（每个权重只有 -1、0、+1 三种取值），
+          那 27B 参数就只需要 27 × 1.58 ÷ 8 ≈ <strong>5.3 GB</strong>。数字上刚好能塞进去。</p>
+
+        <p>于是我从"加载失败"开始，一路撞到"上下文越长越慢"，中间还遇上一次参数和程序互相打架。
+          三个问题都留下了完整的日志，这篇就是把它们读一遍。</p>
+
+        <h2><span class="h2num">01</span>第一个问题：加载失败，但报错没告诉你为什么</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>LM Studio / llama.cpp</span></div>
+    <pre>Failed to load model.
+    error loading model: llama_model_loader: failed to load model from
+      D:\LM models\...\Bonsai-2-27B-PTQ1_0-CRACK.gguf</pre>
+        </div>
+
+        <p>这个报错几乎没有信息量。"failed to load model" 可能意味着文件损坏、
+          内存不足、路径有问题，或者——就像这次——<strong>格式不被识别</strong>。</p>
+
+        <p>原因是这个模型的量化类型叫 <code>PTQ1_0</code>。
+          GGUF 文件头里会写一个<em>量化类型编号</em>，而 <code>PTQ1_0</code> 是一个较新的编号，
+          标准版的 llama.cpp 里没有对应的解码器，于是它在读文件头的时候就放弃了。</p>
+
+        <blockquote>
+          <p>这里有一条容易踩错的认知：<strong>GGUF 是一种容器格式，不是兼容性保证。</strong>
+            它规定了元数据和张量要怎么摆放，但每个张量可以是任意一种量化类型。
+            文件名后缀（<code>Q4_K_M</code>、<code>IQ2_XS</code>、<code>PTQ1_0</code>……）
+            才是决定能不能加载的东西。</p>
+        </blockquote>
+
+        <p>解决方式是换一个支持这种类型的 llama.cpp 构建（上游分支或社区 fork 都行）。
+          有一条经验值得记住：<strong>不要用不支持的标准版强行加载</strong>。
+          有些实现不会报错，而是把不认识的权重按错误的方式解码，
+          结果就是模型能跑、但输出一塌糊涂——那种故障比直接加载失败难查十倍。</p>
+
+        <h2><span class="h2num">02</span>第二个问题：参数和程序打架</h2>
+
+        <p>换了后端之后，模型能加载了。但启动日志里冒出一行警告，我盯着看了很久：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>启动日志</span></div>
+    <pre>common_fit_params: failed to fit params to free device memory:
+      n_gpu_layers already set by user to 75, abort</pre>
+        </div>
+
+        <p>字面意思是「参数拟合失败」，读起来像出错了。但实际含义恰恰相反：</p>
+
+        <p>llama.cpp 在启动时会做一件事——<strong>自己算一遍</strong>「你这台机器的空闲显存能放几层，
+          然后自动决定 <code>-ngl</code> 的值」。可我在命令行里已经手动写了 <code>-ngl 75</code>，
+          它一看我指定过了，就<em>放弃自动计算</em>（<code>abort</code> 在这里是"我不管了"的意思，
+          不是"程序终止了"）。</p>
+
+        <p>所以这行日志真正的含义是：<strong>接下来的显存管理，责任归你了。</strong>
+          它不再是错误，而是一次责任移交。要确认移交得好不好，只能自己去看：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>看显存的实际占用</span></div>
+    <pre>nvidia-smi -l 1</pre>
+        </div>
+
+        <p>盯几秒，看三件事：显存是否接近上限、GPU 利用率高不高、
+          有没有出现"共享显存"（一旦开始借用系统内存，速度会断崖式下降）。</p>
+
+        <h2><span class="h2num">03</span>第三个问题：上下文越长，生成越慢</h2>
+
+        <p>这才是真正重要的一段。我把那两小时日志里的生成速度按上下文长度整理出来：</p>
+
+        <table>
+          <thead>
+            <tr><th>上下文长度</th><th>生成速度</th><th>处理输入的速度</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>约 9K</td><td>19.6 tokens/s</td><td>248 tokens/s</td></tr>
+            <tr><td>约 25K</td><td>18 – 19 tokens/s</td><td>—</td></tr>
+            <tr><td>约 40K</td><td>16 – 18 tokens/s</td><td>~178 tokens/s</td></tr>
+            <tr><td>约 50K</td><td>13 – 15 tokens/s</td><td>—</td></tr>
+            <tr><td>接近 64K</td><td>8 – 13 tokens/s</td><td>~140 tokens/s</td></tr>
+          </tbody>
+        </table>
+
+        <p><mark>从 20 掉到 8，衰减了六成。</mark>而这不是故障，是这个配置的必然结果——
+          因为注意力机制每一轮都要读一遍前面所有 token 的 KV 缓存，
+          上下文翻一倍，这部分开销也跟着翻。</p>
+
+        <p>日志里还有一条间接证据，说明缓存已经吃紧：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>提示缓存被清理</span></div>
+    <pre>making room for prompt cache entry, removing oldest entry
+      (size = 612.442 MiB / 1263.644 MiB)</pre>
+        </div>
+
+        <p>为腾出空间，旧的提示缓存条目被丢掉了——
+          这意味着<strong>下次问到相关内容时，那部分 prefix 得重新计算一遍</strong>。
+          在长上下文下，重算的代价是几十秒级的。</p>
+
+        <h2><span class="h2num">04</span>三个参数，各管一件事</h2>
+
+        <p>理清上面的现象之后，调参就不再是碰运气了。启动命令里真正影响体验的只有三个：</p>
+
+        <table>
+          <thead>
+            <tr><th>参数</th><th>管什么</th><th>怎么定</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>-ngl</code></td>
+              <td>有多少层放到 GPU 上跑</td>
+              <td>显存够就往上加，直到 <code>nvidia-smi</code> 显示接近上限但没溢出</td>
+            </tr>
+            <tr>
+              <td><code>-c</code></td>
+              <td>上下文长度</td>
+              <td><strong>最影响速度的一刀。</strong> 64K 和 16K 是两个世界</td>
+            </tr>
+            <tr>
+              <td><code>--cache-type-k/v</code></td>
+              <td>KV 缓存用什么精度存</td>
+              <td><code>q4_0</code> 省显存、损质量；显存有余量就上 <code>q8_0</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>还有一个 <code>-fa on</code>（Flash Attention），它的作用是让注意力计算不需要把整个矩阵展开，
+          省显存也更省带宽。这个我建议一直开着——除非你的显卡架构不支持。</p>
+
+        <p>把这三者串起来看，思路就清楚了：<strong><code>-c</code> 决定你要花多少显存，
+          <code>--cache-type-*</code> 决定每单位缓存占多少显存，<code>-ngl</code> 决定剩下的够不够放模型。</strong>
+          三者是一道加法题，不是三个独立的开关。</p>
+
+        <h2><span class="h2num">05</span>两个容易被忽略的细节</h2>
+
+        <p><strong>第一，日志里的时间戳不好读。</strong>它长这样：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>日志行首</span></div>
+    <pre>0.00.025.059  ...
+    1.52.339.120  ...
+    124.59.846.001  ...</pre>
+        </div>
+
+        <p>四段数字，格式是「分钟 . 秒 . 毫秒 . 微秒」。所以
+          <code>124.59.846.001</code> 是「第 124 分 59.846001 秒」，约两小时。
+          我第一次看以为第一段是小时，算出来一个不可能的数字——
+          这类格式在读日志时值得先确认一次，不然时间轴会整个错位。</p>
+
+        <p><strong>第二，服务默认没有访问控制。</strong></p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>启动时的警告</span></div>
+    <pre>CORS is set to allow all origins ('*') and no API key is set
+    this can be a security risk</pre>
+        </div>
+
+        <p>它默认只监听 <code>127.0.0.1</code>，所以在本机上用风险不大。
+          但如果你想从别的设备访问（就像我在
+          <a href="/posts/local-llm-timing.html">另一篇笔记</a>里那样改成 <code>0.0.0.0</code>），
+          就必须同时加上访问密钥，否则等于把一个可以随便调用的模型接口挂在了网上。</p>
+
+        <h2><span class="h2num">06</span>8 GB 显存到底能做什么</h2>
+
+        <p>这份日志跑了两小时出头，中途有几次客户端主动取消任务，
+          最后正常退出、没有崩溃。所以我的结论是：</p>
+
+        <ul>
+          <li><strong>能跑</strong>。一个 27B 的三值量化模型，在 8 GB 显存 + 16 GB 内存的笔记本上可以稳定运行。</li>
+          <li><strong>但不快</strong>。短上下文约 20 tokens/s，接近 64K 时掉到 8–13。
+            换算一下，8 tokens/s 大约相当于每秒出五六个汉字——能读，但要等。</li>
+          <li><strong>最划算的调法是降上下文</strong>，不是加 <code>-ngl</code>。
+            32K 上下文的速度明显好于 64K，而多数日常对话根本用不到 64K。</li>
+        </ul>
+
+        <p>这件事让我对"本地跑模型"有了一个更具体的认识：
+          真正决定体验的不是模型有多大，而是<em>你打算让它记住多长的上下文</em>。
+          参数表上的"支持 128K 上下文"是能力上限，不是推荐值——
+          把它当默认值用，代价会体现在每一次生成的速度上。</p>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自一份两小时的 llama-server 运行日志与相应的排查记录。
+            机型为 Ryzen 7 7735H + RTX 4060（8 GB）+ 16 GB 内存，模型为 27B 三值量化。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>把「加载失败」和「性能衰减」合成了一篇——它们本来是同一次折腾的前后两段，
+            分开看只是两个孤立的问题，串起来才是一条完整的"从跑不动到跑起来再到跑得快"的路径。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>1.58 bit 是怎么来的。</b>
+            一个权重有三种取值，信息量是 log₂(3) ≈ 1.585 比特。
+            这就是"三值量化"能把 27B 压到 5.3 GB 的原因——
+            相比 4 bit 量化（约 13.5 GB）少了六成。
+          </p>
+          <p class="marginnote">
+            <b>为什么 <code>abort</code> 不是"退出"。</b>
+            日志里的措辞取自它内部的函数名，不是面向用户的文案。
+            读这一条时要注意它后面还有没有继续输出——如果进程还在跑，那 abort 只是"跳过这一步"。
+          </p>
+          <p class="marginnote">
+            <b>KV 缓存的大小会算吗。</b>
+            大致是 <code>2 × 层数 × 上下文 × 隐藏维度 × 每元素字节数</code>
+            （2 是因为 K 和 V 各一份）。用 <code>q4_0</code> 时每元素约 0.5 字节，
+            这解释了为什么 64K 上下文即使量化后仍然是个大负担。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/serial-log-day.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">串口日志里的一天</span>
+      </a>
+      <a href="/posts/boot-log.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">读懂 ESP32 的启动日志</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/local-llm-timing.html">
+          <span class="relitem__meta">08.31 · 工具链</span>
+          <span class="relitem__title">那 7 秒里，6 秒在加载模型</span>
+          <span class="relitem__sum">让它对外说话、确认它在用什么算，以及把 7.13 秒拆成加载、读题、作答三笔账。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="local-27b-on-8gb" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

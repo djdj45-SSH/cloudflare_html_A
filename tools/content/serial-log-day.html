@@ -1,0 +1,185 @@
+    <div class="wrap article-body">
+      <!-- ================= 正文 ================= -->
+      <div class="prose">
+        <p class="first">那天早上九点，我把串口监视器打开，泡了杯咖啡，打算二十分钟内解决一个"小问题"。
+          下午六点，咖啡续了四杯，问题还在，而我开始怀疑自己过去三年学的每一件事。</p>
+
+        <p>现象很干净，干净得反常：ESP32 上的 micro-ROS 客户端每隔大约 40 秒就会和 Agent 断开一次，
+          重连耗时 3 到 4 秒，然后一切恢复正常。不是偶发，不是随机，是<mark>精确的、可重复的、带着节拍的</mark>。
+          这种规律性通常意味着它不是干扰，而是某个计数器溢出了，或者某个定时器到期了。</p>
+
+        <h2><span class="h2num">01</span>先把现象量化</h2>
+
+        <p>我没有立刻改代码。经验告诉我，在没摸清边界条件之前动手，只会把水搅浑。我先花了两个小时做一件事：
+          记录。Agent 侧开着 <code>-v6</code>，ESP32 侧串口波特率提到 921600，两边的时间戳都打上，跑了 30 分钟。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>agent · ros2 run micro_ros_agent -v6</span></div>
+<pre><span class="c"># 一次完整的掉线—重连周期，时间戳为本地时钟</span>
+[09:14:02.311] DEBUG  client 0x3FFB2C40 &lt;--  send message 42 bytes
+[09:14:02.318] DEBUG  client 0x3FFB2C40 --&gt;  recv ack
+<span class="c"># 此后 3.2 秒内，Agent 侧没有任何一行输出</span>
+[09:14:05.520] WARN   client 0x3FFB2C40 : transport timeout, closing session
+[09:14:05.521] INFO   session closed, 1 clients remaining: 0
+[09:14:08.744] INFO   new session: client 0x3FFB1F88 (udp 192.168.1.11:8888)
+[09:14:08.901] DEBUG  client 0x3FFB1F88 &lt;--  send message 42 bytes</pre>
+        </div>
+
+        <p>关键数字有三个：周期约 40 秒，静默 3.2 秒，重连后 <code>client</code> 句柄变了。
+          第三点很重要——句柄变化说明 Agent 认为这是一个<em>新会话</em>，不是原来的连接被续上。
+          也就是说，ESP32 那边主动重启了 transport，或者压根重启了整个任务。</p>
+
+        <blockquote>
+          <p>我第一反应是 Wi-Fi。因为它是这套系统里最不可靠的一环，而且我手上有现成的数据：
+            局域网 ping 常年 100 ms 上下——这个数我一直觉得不对劲，但从来没认真追过。</p>
+        </blockquote>
+
+        <h2><span class="h2num">02</span>第一个假设：Wi-Fi（错的）</h2>
+
+        <p>于是我做了所有 Wi-Fi 问题该做的检查。</p>
+
+        <ul>
+          <li>把 ESP32 移到路由器旁边， RSSI 从 -67 dBm 提升到 -41 dBm。掉线照旧。</li>
+          <li>换信道，从自动跳到的 6 换到 1 和 11。掉线照旧。</li>
+          <li>把 2.4 GHz 上其余 11 个网络的占用情况扫了一遍，邻频干扰不算严重。掉线照旧。</li>
+          <li>关掉 Wi-Fi 省电模式（<code>wifi_ps_type_t</code> 设为 <code>WIFI_PS_NONE</code>）。掉线照旧。</li>
+          <li>甚至把 Agent 从虚拟机挪到宿主机，排除虚拟化网络的锅。掉线照旧。</li>
+        </ul>
+
+        <p>五轮下来，我手上唯一的收获是：<strong>Wi-Fi 不是原因，至少不是主因</strong>。
+          这个结论当时让我很沮丧，因为它意味着我排掉了最容易的那一类可能。</p>
+
+        <p>但有一行日志我没看懂，也一直没删掉。它出现在每次掉线前的最后一条：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>esp32 · uart0 921600</span></div>
+<pre>[09:14:05.104] E (41237) BT_BTM: btm_sec_disconnected
+<span class="c">// BT_BTM？我这个项目根本没开蓝牙。</span></pre>
+        </div>
+
+        <p>我把它当成 SDK 的噪音日志忽略了。这是一个错误，我为此多花了两天。</p>
+
+        <figure class="figure">
+          <svg viewBox="0 0 800 300" role="img" aria-label="掉线周期时序示意">
+            <g stroke-opacity=".16" stroke-width="1" style="stroke:var(--text-3)">
+              <path d="M40 90 H760 M40 160 H760 M40 230 H760"/>
+            </g>
+            <path d="M40 250 H764" stroke-width="1.6" fill="none" style="stroke:var(--text-3)"/>
+            <!-- 正常通信段 -->
+            <g stroke-width="2" fill="none" stroke-linecap="round" style="stroke:var(--text-3)">
+              <path d="M56 200 v-22 M76 200 v-30 M96 200 v-18 M116 200 v-34 M136 200 v-24 M156 200 v-28"/>
+              <path d="M300 200 v-26 M320 200 v-20 M340 200 v-32 M360 200 v-22 M380 200 v-30"/>
+              <path d="M600 200 v-24 M620 200 v-30 M640 200 v-20 M660 200 v-34"/>
+            </g>
+            <!-- 沉默段 -->
+            <rect x="176" y="150" width="110" height="60" fill-opacity=".08" style="fill:var(--amber)"/>
+            <path d="M176 200 H286" stroke-width="2.4" fill="none" style="stroke:var(--amber)"/>
+            <text x="181" y="192" font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--amber)">3.2 s 静默</text>
+            <rect x="410" y="150" width="110" height="60" fill-opacity=".08" style="fill:var(--amber)"/>
+            <path d="M410 200 H520" stroke-width="2.4" fill="none" style="stroke:var(--amber)"/>
+            <!-- 周期标注 -->
+            <g stroke-width="1.1" fill="none" stroke-dasharray="4 4" style="stroke:var(--text-3)">
+              <path d="M56 268 V246 M56 246 H520 M520 246 V268"/>
+            </g>
+            <text x="250" y="262" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="12" fill-opacity=".7" style="fill:var(--text-3)">≈ 40 s</text>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="12" fill-opacity=".55" style="fill:var(--text-3)">
+              <text x="44" y="286">TX</text><text x="286" y="286">掉线</text><text x="600" y="286">恢复</text>
+            </g>
+          </svg>
+          <figcaption><b>图 01</b> — 30 分钟采样中提取的周期结构。静默段长度稳定在 3.2 ± 0.15 s。</figcaption>
+        </figure>
+
+        <h2><span class="h2num">03</span>把日志铺在地板上</h2>
+
+        <p>第二天下午我做了一件笨事：把三天积累的串口日志用 A4 纸打了出来，一共 47 页，铺在客厅地板上，
+          用三支不同颜色的马克笔标注——红色标掉线点，蓝色标重启，黄色标所有我不认识的日志行。</p>
+
+        <p>纸面上看，规律比屏幕里清楚得多。黄线几乎全部集中在掉线前的最后 200 毫秒内，
+          而且它们的来源高度一致：<code>BT_BTM</code>、<code>RTC_MODULE</code>、<code>adc</code>。
+          这些模块我没用过，但它们同时出现，指向的不是软件，是<strong>某个共同的上游</strong>。</p>
+
+        <p>芯片里能让蓝牙、RTC、ADC 同时报错的共同上游，只有两个：时钟和电源。</p>
+
+        <h2><span class="h2num">04</span>第二个假设：电源（对的）</h2>
+
+        <p>我拿了万用表，把探头点在开发板的 3V3 和 GND 上，然后盯着掉线时刻。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>测量 · UNI-T UT61E · 3V3 引脚对 GND</span></div>
+<pre>稳态        3.298 V
+掉线前 1 s   3.291 V
+掉线前 50 ms 2.874 V   <span class="c">// 瞬时跌落 0.42 V</span>
+掉线瞬间    2.713 V   <span class="c">// 最低点，低于 ESP32 的 2.7 V 临界附近</span>
+恢复        3.301 V</pre>
+        </div>
+
+        <p>0.42 V 的瞬时跌落，持续不到 100 毫秒。用万用表能看见，是因为我把采样调到最快挡并且盯着看；
+          用示波器看则更清楚——一个宽度约 80 ms 的凹陷，底部带振铃。</p>
+
+        <p>而这个凹陷的源头，最终锁定在供电路径上：ESP32 和一颗激光雷达传感器共用一路 5 V，
+          中间串着一根<strong>一米长的 USB 线</strong>。雷达电机每次转起来、每一次周期性提速，
+          就会拉一次电流尖峰；线阻加上去耦电容不足，尖峰直接反映成 3V3 上的跌落。</p>
+
+        <blockquote>
+          <p>40 秒这个周期，其实是雷达的一次自检 / 转速校准循环。
+            我以为它是通信层的计数器溢出，实际它是<strong>另一台设备的呼吸节奏</strong>。</p>
+        </blockquote>
+
+        <h2><span class="h2num">05</span>验证，而不是"修好"</h2>
+
+        <p>找到疑似根因之后，我没有直接改硬件。先做了三步验证，每一步都只改一个变量：</p>
+
+        <ol>
+          <li><strong>换电源</strong>：把共用 5 V 改成两路独立供电，雷达走单独的 DC-DC。掉线周期消失，连续运行 40 分钟零掉线。</li>
+          <li><strong>反向验证</strong>：把电源改回共用，同时在固件里把雷达的转速校准周期临时调到 12 秒。
+            掉线周期跟着变成 12 秒左右。<mark>这一步是关键证据</mark>——它证明周期由雷达决定，而不是由 ROS 通信栈决定。</li>
+          <li><strong>硬件兜底</strong>：恢复共用供电（工程上暂时没法改结构），在 3V3 侧补 470 µF 电解 +
+            100 nF 陶瓷，并缩短供电线到 20 cm。静默从 3.2 s 降到 0，连续跑 6 小时无掉线。</li>
+        </ol>
+
+        <p>第二步的反向验证是我最想留下的东西。修好一个 bug 很容易靠运气，但如果能让 bug 的频率<em>跟着你的手指变</em>，
+          那才说明你真的知道它在哪。</p>
+
+        <h2><span class="h2num">06</span>这天剩下的教训</h2>
+
+        <p>有三条，按对我自己的刺痛程度排序：</p>
+
+        <ul>
+          <li><strong>"规律"不等于"软件"。</strong>周期性故障一样可以是物理原因。机械动作、电机换相、
+            甚至是空调压缩机启停，都有周期。</li>
+          <li><strong>看不懂的日志不要忽略，要归类。</strong><code>BT_BTM</code> 那行我看了三天都当噪音。
+            如果我当时去查它属于哪个模块，第二天就能收工。</li>
+          <li><strong>先量化，再动手。</strong>第二天我一整天都在改代码，改的全是无效方向。
+            第一天那两小时的记录，才是这三天里最有价值的工作。</li>
+        </ul>
+
+        <p>最后是那台激光雷达。它一直在正常工作，从没报过错，也没有任何一行日志指向它。
+          它只是每 40 秒需要一次稍大的电流，而我给的线太细了。</p>
+
+        <dl class="revision">
+          <dt>2026.09.16 修订</dt>
+          <dd>补上第二步反向验证的数据（掉线周期随雷达校准周期变为 12 s）。初稿里我只写了"换电源后恢复"，那不构成证据。</dd>
+          <dt>2026.09.15 修订</dt>
+          <dd>初稿把根因写成"Wi-Fi 信道干扰"，结论错误，已全文重写。感谢读者 Z 在邮件里指出 40 s 周期与雷达电机声同步。</dd>
+        </dl>
+      </div>
+
+      <!-- ================= 边注 ================= -->
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么是 921600。</b> 默认 115200 下，ESP32 自己打印的日志会把 micro-ROS 的调试输出冲掉，
+            两边的相对时间关系就丢了。代价是长线容易丢字符——我用的是 20 cm 的短线。
+          </p>
+          <p class="marginnote">
+            <b>client 句柄变化</b>是判断"新会话"最省事的依据。Agent 打印的是内部指针值，
+            同一个物理设备重连后地址往往不同（这里是 0x3FFB2C40 → 0x3FFB1F88），一眼就能分辨是真重连还是心跳恢复。
+          </p>
+          <p class="marginnote">
+            <b>关于那 100 ms。</b> 局域网 ping 常年 100 ms 这件事我至今没彻底解决，但它和这次掉线无关——
+            换了电源之后，同样的 100 ms 延迟下通信依然稳定。延迟和掉线是两件事，别混在一起查。
+          </p>
+        </div>
+      </aside>
+    </div>

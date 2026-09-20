@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我改了那个函数，但跑的不是它 — 余量 MARGIN</title>
+<meta name="description" content="同一台设备的数据在两个页面上表现相反。三个对照实验把嫌疑逼进一个很窄的角落，而真正的麻烦是一个函数名有两份实现。">
+<link rel="canonical" href="https://margin.pages.dev/posts/duplicate-handler.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我改了那个函数，但跑的不是它 — 余量 MARGIN">
+<meta property="og:description" content="改代码是成功的，唯一不对的是——你改的不是会运行的那一份。">
+<meta property="og:url" content="https://margin.pages.dev/posts/duplicate-handler.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">调试笔记 · No.02 · 数据链路 / 前端</div>
+      <h1>我改了那个函数，但跑的不是它</h1>
+      <p class="standfirst">同一台真实设备、同一路数据，实况页面显示正常，调试窗口一片空白。三次对照实验之后，问题被逼进了一个很窄的角落。</p>
+      <div class="byline">
+        <span><time datetime="2025-09-22">2025.09.22</time></span>
+        <span class="dot"></span><span data-readtime>约 7 分钟</span>
+        <span class="dot"></span><span>2,350 字</span>
+        <span class="dot"></span><span>Vue · 数据链路调试</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/debug.html">调试</a>
+        <a class="tag" href="/tags/frontend.html">前端</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">同一台真实设备、同一路数据，在两个页面上表现完全不同：</p>
+
+        <ul>
+          <li>「实况数据」页面：<strong>正常显示</strong>，数字在跳。</li>
+          <li>「调试窗口」页面：<strong>一片空白</strong>，什么都没有。</li>
+        </ul>
+
+        <p>这两个页面消费的是同一份数据。所以问题不可能出在"数据源"上——
+          它已经证明了数据是通的。剩下的可能性只在于：<em>数据在这条链路上被丢掉了一次</em>。</p>
+
+        <h2><span class="h2num">01</span>先做三个对照，把范围缩到一种组合</h2>
+
+        <p>手上有两个变量可以拨动：<strong>端口</strong>（8081 / 8082）和<strong>数据来源</strong>（真实设备 / 模拟数据）。
+          两个变量各两个取值，四种组合，我做了三次——因为其中一种就是坏掉的那个：</p>
+
+        <table>
+          <thead>
+            <tr><th>端口</th><th>数据来源</th><th>结果</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>8081</td><td>真实设备</td><td>调试窗口空白</td></tr>
+            <tr><td>8082</td><td>真实设备</td><td>正常</td></tr>
+            <tr><td>8081</td><td>模拟数据</td><td>正常</td></tr>
+          </tbody>
+        </table>
+
+        <p>这张表比它看起来有用得多，因为它一次排除了两个方向：</p>
+
+        <ul>
+          <li><strong>8081 这个端口本身没问题</strong>——换成模拟数据它就好了。
+            所以不是端口配错、不是被占用、不是防火墙。</li>
+          <li><strong>真实设备的数据本身没问题</strong>——换到 8082 它就好了。
+            所以不是设备没在发、不是格式不合法。</li>
+        </ul>
+
+        <p>问题被逼进了一个很窄的角落：<mark>「8081 端口上的、真实设备发来的那份数据」</mark>。
+          前两个变量都无罪，有罪的只能是这个组合里的具体内容。</p>
+
+        <blockquote>
+          <p>这是我目前最依赖的排查手法：<strong>把所有变量摆成一张表，用最少的实验次数，
+            排除掉尽可能多的嫌疑</strong>。三次实验的代价，换来了"三个方向里只有一个还需要查"。</p>
+        </blockquote>
+
+        <h2><span class="h2num">02</span>第一个猜想：值没变，所以界面没重绘</h2>
+
+        <p>范围缩小之后，我猜了第一个原因：<strong>数据本身没变化</strong>。</p>
+
+        <p>前端有个很常见的坑——如果新值和旧值完全一样，很多渲染逻辑会认为"没必要更新"，
+          于是界面保持原样。空白可能是"从来没画过第一帧"，
+          因为第一帧到来的数据就已经"等于初始值"了。</p>
+
+        <p>这个猜想符合当时的表象，但我没有立刻去改代码。
+          因为"数据没变化"和"数据没到达"是两件事，症状却一模一样。
+          要分清它们，得往链路的上游走一步。</p>
+
+        <h2><span class="h2num">03</span>把链路拆成三个问题</h2>
+
+        <p>一条数据链路上有三个位置可能会断，我把它们写成三个必须回答的问题：</p>
+
+        <ol>
+          <li><strong>到底有没有触发转发？</strong> —— 数据到了，回调函数被执行了吗？</li>
+          <li><strong>转发的目标地址是什么？</strong> —— 就算执行了，它发去了正确的地方吗？</li>
+          <li><strong>转发的内容是什么？</strong> —— 就算发对了地方，发出去的东西是对的吗？</li>
+        </ol>
+
+        <p>为了让第一个问题能被回答，我在控制台加了一行转发日志。
+          如果日志都不出现，那后面两个问题就没有意义——这是最省时间的做法：
+          <em>先确认这条路上有没有人，再问他带了什么。</em></p>
+
+        <h2><span class="h2num">04</span>一动手就撞到的事：两个同名的函数</h2>
+
+        <p>准备去找这个回调函数的时候，我搜了一下它的名字。结果出来两条：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>全局搜索 onAtmosphericDataReceived</span></div>
+    <pre>src/dataManager.js    →  function onAtmosphericDataReceived(data) { ... }
+    src/manager.js        →  function onAtmosphericDataReceived(data) { ... }</pre>
+        </div>
+
+        <p><strong>同一个函数名，两份互相独立的实现。</strong></p>
+
+        <p>这意味着一个很糟的可能性：我刚才如果在 <code>dataManager.js</code> 里改了逻辑、加了日志，
+          而运行时实际执行的是 <code>manager.js</code> 里那一份——那我做的一切都是白费，
+          而且屏幕上不会有任何提示告诉我"你改错了地方"。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>确认到底哪一个在跑</span></div>
+    <pre><span class="c">// 在函数体第一行打印调用栈，最直接</span>
+    console.trace('onAtmosphericDataReceived called');
+    <span class="c">// 控制台会告诉你调用它的那条路径经过了哪个文件</span></pre>
+        </div>
+
+        <p>这类问题的隐蔽之处在于：<strong>改代码这件事本身是"成功"的</strong>。
+          保存没报错、编译没报错、编辑器里看到的就是你写的那些字。
+          唯一不对的是——你改的不是会运行的那一份。</p>
+
+        <h2><span class="h2num">05</span>为什么会有两个同名函数</h2>
+
+        <p>回头看，这几乎是一个必然的结果，而不是意外：</p>
+
+        <ul>
+          <li><strong>先写了一个，后来重构又写了一个。</strong>
+            老的那份没有立刻删——"先留着，万一还要用"。于是它一直在那儿。</li>
+          <li><strong>两份代码的文件名都很合理。</strong>
+            <code>dataManager</code> 和 <code>manager</code>，
+            单看名字谁都不像垃圾。</li>
+          <li><strong>没人真的用过"搜索"这个动作。</strong>
+            如果当初写过一行 import 或者一次全局搜索，这个重复立刻就会暴露。</li>
+        </ul>
+
+        <p>所以我现在养成了一个习惯：<strong>改一个函数之前，先全局搜它的名字</strong>。
+          如果搜出来不止一处，先弄清楚哪一份在跑，再动手。
+          这一步大概花十秒，能省掉一个下午。</p>
+
+        <h2><span class="h2num">06</span>这件事留下的三句话</h2>
+
+        <ol>
+          <li><strong>两个变量就用表格铺开。</strong>
+            三种组合跑一遍，就能排除掉大部分方向。这比"凭感觉先改一处试试"快得多。</li>
+          <li><strong>先确认有没有人，再问他带了什么。</strong>
+            链路上先验证"函数有没有被调用"，再去看"内容对不对"。
+            顺序反了，就会在数据的细节里迷路。</li>
+          <li><strong>改代码之前先搜索这个名字。</strong>
+            同名实现是静默的——它不会报错，只会让你的修改石沉大海。</li>
+        </ol>
+
+        <p>至于最初那个空白窗口，我最后还是回到了"值没变所以没重绘"这条线上。
+          但如果没有前面对链路的确认，我连"值到底有没有到达"都不知道，
+          改重绘逻辑也只是在赌。</p>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自 2025 年 9 月 22 日的一段便签。原始记录是散点的排查条目
+            （对照结果、三个待查问题、以及"两个同名函数"这个发现），
+            这里的结构是事后重排的。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>原文只写了"系统中有两个不同的 onAtmosphericDataReceived 实现"这一句。
+            重读时我觉得这一句才是整段记录里最值钱的部分，所以单独给它一节。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么不做第四组实验。</b>
+            8082 + 模拟数据这一格，无论结果是什么都不会提供新信息——
+            另外三格已经能唯一确定"坏的是 8081 + 真实数据"。
+            控制变量法的价值恰恰在于：<em>不用把所有组合都试一遍</em>。
+          </p>
+          <p class="marginnote">
+            <b>console.trace 而不是 console.log。</b>
+            log 只告诉你函数被调用了；trace 会打印完整的调用栈，
+            直接指出是哪条路径、哪个文件里的实现被执行了。
+            排查"到底哪一份在跑"的时候，这个差别是决定性的。
+          </p>
+          <p class="marginnote">
+            <b>这类问题的通用形态。</b>
+            所有"改了没反应"的故障，都值得先问一句：
+            我改的是运行时真正加载的那一份吗？语言、框架、构建工具换了，这个问题依然存在。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/suspicious-fit.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">一次好得可疑的拟合</span>
+      </a>
+      <a href="/posts/rotary-encoder-ui.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">两个输入，一个状态机</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/serial-log-day.html">
+          <span class="relitem__meta">09.14 · 调试笔记</span>
+          <span class="relitem__title">串口日志里的一天</span>
+          <span class="relitem__sum">设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上，才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。</span>
+        </a>
+        <a class="relitem" href="/posts/boot-log.html">
+          <span class="relitem__meta">09.20 · 固件</span>
+          <span class="relitem__title">读懂 ESP32 的启动日志</span>
+          <span class="relitem__sum">复位原因、最大连续内存块、分区地址账本——开机日志里最该看的四个地方。</span>
+        </a>
+        <a class="relitem" href="/posts/servo-jitter.html">
+          <span class="relitem__meta">08.05 · 硬件</span>
+          <span class="relitem__title">舵机抖动的三种可能</span>
+          <span class="relitem__sum">同一个角度指令，舵机却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，第三种最意外。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="duplicate-handler" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

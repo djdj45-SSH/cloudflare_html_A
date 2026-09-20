@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>两个输入，一个状态机 — 余量 MARGIN</title>
+<meta name="description" content="一个旋转编码器只有转和按两个动作，却要控制一台有多个模式的设备。把交互设计写下来，才发现有些决定我说不出为什么。">
+<link rel="canonical" href="https://margin.pages.dev/posts/rotary-encoder-ui.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="两个输入，一个状态机 — 余量 MARGIN">
+<meta property="og:description" content="用三个动作控制一台设备，以及为什么切模式必须用长按。">
+<meta property="og:url" content="https://margin.pages.dev/posts/rotary-encoder-ui.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">设计 · No.03 · 旋转编码器 / 状态机</div>
+      <h1>两个输入，一个状态机</h1>
+      <p class="standfirst">这台设备的全部输入只有一个旋转编码器：能左转、能右转、能按下去。而它要控制一个屏幕、一个摄像头和一张 SD 卡里的图片。</p>
+      <div class="byline">
+        <span><time datetime="2026-05-28">2026.05.28</time></span>
+        <span class="dot"></span><span data-readtime>约 8 分钟</span>
+        <span class="dot"></span><span>2,881 字</span>
+        <span class="dot"></span><span>旋转编码器 · SPI 屏幕 · 摄像头</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/design.html">设计</a>
+        <a class="tag" href="/tags/hardware.html">硬件</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">我手上这台设备的全部输入，只有一个旋转编码器：能左转、能右转、能按下去。
+          三个动作，其中两个还是同一个物理量的两个方向。</p>
+
+        <p>而它要控制的东西有：一个屏幕、一个摄像头、一张 SD 卡里的图片、以及一个正在跑脚本的系统。
+          于是问题来了——<strong>用三个动作，怎么表达这么多意图，而且不让人按错？</strong></p>
+
+        <p>下面是我当时写在便签上的设计，以及后来补上的几条理由。
+          把它整理成文字的过程比预想的更有用：<em>有些决定我原本只是「觉得应该这样」，
+          写下来才发现自己其实说不出为什么</em>。</p>
+
+        <h2><span class="h2num">01</span>原始设计</h2>
+
+        <blockquote>
+          <p>一、旋转编码器长按用于切换模式，旋转不能切换模式。</p>
+          <p>二、长按之后：如果原来是图片浏览模式，就切到拍照模式；如果在拍照模式，
+            屏幕实时显示摄像头画面；在图片浏览模式下，摄像头可以不工作。</p>
+          <p>三、在图片浏览模式时，旋转编码器用于切换图片。</p>
+          <p>四、拍照模式时旋转编码器能干什么——这个我还没有想好。</p>
+          <p>五、每次切换的时候，屏幕上弹一个提示，一秒左右之后消失。</p>
+        </blockquote>
+
+        <p>只有两个模式：<strong>图片浏览</strong>和<strong>拍照</strong>。
+          之所以这么少，不是因为想清楚了，而是因为输入手段实在有限——多加一个模式，
+          用户就得在脑子里多记一套映射关系，而编码器能给出的提示只有那一个屏幕。</p>
+
+        <h2><span class="h2num">02</span>为什么切模式必须用长按</h2>
+
+        <p>第一眼看去，用「旋转到尽头」来切模式更省事：转到最后一张图，再往右转就进拍照模式。
+          很多设备就是这么做的。我没这么做，理由有两条：</p>
+
+        <ul>
+          <li><strong>旋转是连续的、物理的、会误触的。</strong>
+            手指离开旋钮时的余力、桌面的震动、编码器本身的机械抖动，都可能产生一次多余的脉冲。
+            让一个会抖的信号去承担「切换状态」这种不可逆的职责，是危险的——
+            浏览图片时手一抖就跳进拍照模式，用户会以为设备坏了。</li>
+          <li><strong>按击是离散的、有明确意图的。</strong>
+            按下去是一个需要主动发力的动作，很难误触。而且「长按」比「短按」更重，
+            天然适合承载更重的操作。</li>
+        </ul>
+
+        <blockquote>
+          <p>由此得到一条我后来反复用到的规则：
+            <strong>连续量用于调整，离散量用于切换。</strong>
+            旋钮、滑条、摇杆这种可以取任意值的输入，适合「调大小」；
+            按钮、长按、双击这种取「有/无」的输入，适合「改状态」。</p>
+        </blockquote>
+
+        <p>于是分工就清楚了：</p>
+
+        <ul>
+          <li><strong>长按（≥ 1 秒）</strong>：切模式，这是全局操作，在任何模式下含义都一样。</li>
+          <li><strong>旋转</strong>：调整当前模式里的量。图片浏览模式下是上一张 / 下一张。</li>
+          <li><strong>短按（&lt; 1 秒）</strong>：在当前模式里执行一个即时动作。拍照模式下就是拍照。</li>
+        </ul>
+
+        <p>三个动作，各就各位。用户只需要记住一件事：<em>长按是「换房间」，旋转和短按是「在房间里做事」</em>。</p>
+
+        <h2><span class="h2num">03</span>没想好的那个，我打算留着</h2>
+
+        <p>原始设计里第四条写着「拍照模式时旋转编码器能干什么——没有想好」。
+          整理的时候我试着填上它，比如旋转调整曝光、或者切换分辨率。</p>
+
+        <p>但最后我决定保留这个空白。原因是：<strong>一个还没有真实需求的操作，
+          占着旋钮会让「旋转 = 切换」这个心智模型在不同模式下分裂</strong>。
+          用户在浏览模式转一下是换图，在拍照模式转一下却变成了改设置——
+          同一个动作，两种含义，两种后果。这种不一致带来的困惑，比「少一个功能」代价大得多。</p>
+
+        <p>更好的做法是让它暂时什么都不做。空白是可以被理解的；含义不稳定不行。</p>
+
+        <h2><span class="h2num">04</span>切换必须有回声</h2>
+
+        <p>模式切换有个隐蔽的问题：它<strong>不产生可见的后果</strong>。
+          从浏览切到拍照，屏幕内容会变（预览画面出来了），这算一个反馈；
+          但如果摄像头启动慢了两秒，这两秒里用户不知道自己按成功了没有。</p>
+
+        <p>所以设计里加了一条：切换时弹一个提示，标明「拍照模式」或「浏览模式」，一秒后自动消失。</p>
+
+        <p>一秒这个数字值得说说。太短（300 ms）会被当成闪烁，用户来不及读；
+          太长（3 秒）会盖住他想看的画面，还得等它走。一秒刚好是「确认收到，不添麻烦」的量级——
+          这也是绝大多数系统里 toast 提示的默认时长，不是巧合。</p>
+
+        <h2><span class="h2num">05</span>还有一个非交互的约束：摄像头只在需要时开</h2>
+
+        <p>设计里写着「图片浏览模式下，摄像头可以不工作」。这一条不属于交互设计，
+          属于资源管理，但它影响了交互：</p>
+
+        <p>如果摄像头一直开着，好处是切过去立刻有画面，代价是持续的功耗和发热，
+          在电池设备上不可接受。如果按需启动，就有启动延迟——<mark>而启动延迟必须由那个弹窗来兜住</mark>。</p>
+
+        <p>两条设计是咬合的：<em>因为按需启动，所以必须有即时反馈</em>。
+          写下来之后我才意识到自己当初并不是分别做的两个决定。</p>
+
+        <h2><span class="h2num">06</span>把设计意图翻译成验收标准</h2>
+
+        <p>设计做完之后还有一步，就是回答「怎么算做完了」。这件事比看起来难——
+          「能用」不是一个可以打勾的条目。</p>
+
+        <p>我给自己定了个模板：每个模块给<strong>两个判断点</strong>，第一条看功能，第二条看品质。
+          整理便签时发现，底盘、舵机、雷达三块竟然都自然长成了这个形状：</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>第一条：功能</th>
+              <th>第二条：品质</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>底盘</td>
+              <td>前进、后退、左右转弯都能用</td>
+              <td>动作是否平稳</td>
+            </tr>
+            <tr>
+              <td>舵机</td>
+              <td>180° 范围内能停在工作角度</td>
+              <td>转动是否平稳</td>
+            </tr>
+            <tr>
+              <td>雷达</td>
+              <td>数据能正常上传</td>
+              <td>上传的速度与平稳性</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>三条第二条都是「平稳」，这不是偷懒。<strong>让东西动起来通常很容易，
+          让它动得可控才是真正的工作量。</strong> 第一次让轮子转起来花了半天，
+          让它转得每个方向都可预测，花了两周。</p>
+
+        <h2><span class="h2num">07</span>一个我答不上来的问题</h2>
+
+        <p>整理这批笔记时，有个问题卡住了我：</p>
+
+        <blockquote>
+          <p>我这个电机没有集成测速传感器，它能够知道它自己向前或向后走了多少吗？</p>
+        </blockquote>
+
+        <p>严格地说：不能。没有编码器，电机只能知道「我通电了」，无法知道「轮子究竟转了几圈」。
+          电压相同、负载不同，转速可以差出一倍——这就是为什么小车重启后会一直转，
+          而且分不清方向（那段记录里的原话）。</p>
+
+        <p>当时我给自己的替代方案是：<strong>不要问「走了多远」，改用「能不能回到原点」来验收</strong>。
+          把初始化测试改成一轮：向前走一段、停下、向后走同样长的时间、停下，
+          最后看小车能不能回到起点附近。这样一个不需要测距的指标，
+          反而抓住了「前后对称性」这个更本质的东西。</p>
+
+        <p>另外我在便签里还记着「我有两个测速传感器，但是没接线」。
+          结论是：现在不需要，但得写进文档里——<em>当「能不能回到原点」这个验收开始变得不稳定时，
+          就是该把线接上的时候</em>。给未来留一个明确的触发条件，比现在就装上更划算。</p>
+
+        <h2><span class="h2num">08</span>这些设计最后留下的东西</h2>
+
+        <p>这套东西写在便签里的时候只是一堆散句。整理完之后，我觉得真正能复用的是四条：</p>
+
+        <ol>
+          <li><strong>连续量用于调整，离散量用于切换。</strong> 别让会抖的信号承担不可逆的操作。</li>
+          <li><strong>一个动作在不同模式下的含义要尽量一致。</strong> 做不到的时候，宁可让它空着。</li>
+          <li><strong>任何没有可见后果的操作，都必须给一个即时反馈。</strong> 哪怕只是一秒的弹窗。</li>
+          <li><strong>验收标准写两条：功能跑通，以及它是否平稳。</strong> 第二条才是真正花时间的部分。</li>
+        </ol>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自三段便签：2026 年 5 月 28 日的编码器交互设计、8 月 19 日的电机与验收标准讨论、
+            以及 9 月 13 日关于显示逻辑与重启后状态恢复的零散想法。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>新增第 02、03 两节。原文只写了「旋转不能切模式」这个结论，
+            没有写理由——补理由的过程让我发现自己当初的直觉是对的，只是说不清为什么。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>1 秒是怎么来的。</b> 人在读完一行短文字后需要一个「确认」的停顿，
+            太短会被当成闪烁，太长会挡住内容。1 到 2 秒是常见区间，我取了下限。
+          </p>
+          <p class="marginnote">
+            <b>长按 1 秒是个折中。</b> 太短会和短按混淆（手感抖动可能超过 300 ms），
+            太长会让人以为按键没反应。1 秒是「明显表态」和「不用等」之间的平衡点。
+          </p>
+          <p class="marginnote">
+            <b>关于「重启后恢复现场」。</b>
+            便签里还有一条想法：关机前在跑某个脚本，重启后应该继续跑并显示。
+            这事得配一个「使用说明书」页面，因为屏幕上能看到脚本列表，
+            却没法解释每个脚本在干什么——这类隐含状态迟早需要显式化。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/duplicate-handler.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">我改了那个函数，但跑的不是它</span>
+      </a>
+      <a href="/posts/handwriting-notes.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">为什么我还在手写笔记</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/servo-jitter.html">
+          <span class="relitem__meta">08.05 · 硬件</span>
+          <span class="relitem__title">舵机抖动的三种可能</span>
+          <span class="relitem__sum">同一个角度指令，舵机却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，第三种最意外。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="rotary-encoder-ui" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

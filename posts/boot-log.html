@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>读懂 ESP32 的启动日志 — 余量 MARGIN</title>
+<meta name="description" content="开机那三十行不是噪音。逐段拆解 bootloader 的输出：复位原因、内存水位、Flash 分区账本，以及它其实抄下了你全部的编译选项。">
+<link rel="canonical" href="https://margin.pages.dev/posts/boot-log.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="读懂 ESP32 的启动日志 — 余量 MARGIN">
+<meta property="og:description" content="那三十行开机日志里，藏着芯片型号、内存余量和 Flash 分区。">
+<meta property="og:url" content="https://margin.pages.dev/posts/boot-log.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">固件 · No.15 · ESP32 / ESP-IDF</div>
+      <h1>读懂 ESP32 的启动日志</h1>
+      <p class="standfirst">那三十行开机就滚过去的文字，其实把芯片型号、内存余量、Flash 分区和编译参数全交代了。只是我们习惯把它当噪音。</p>
+      <div class="byline">
+        <span><time datetime="2026-09-20">2026.09.20</time></span>
+        <span class="dot"></span><span data-readtime>约 15 分钟</span>
+        <span class="dot"></span><span>5,316 字</span>
+        <span class="dot"></span><span>ESP32-WROOM-32E · ESP-IDF v5.5.4 · Arduino 3.3.10</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/esp32.html">ESP32</a>
+        <a class="tag" href="/tags/firmware.html">固件</a>
+        <a class="tag" href="/tags/debug.html">调试</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">每次按下复位键，ESP32 都会先喷出三十来行字。它们滚得太快，又长得像乱码，
+          所以几乎所有人的第一反应都是「噪音，忽略」。我看它们看了两年，也是这么想的——
+          直到有一天，一块板子开始每隔几分钟自己重启，而我手上没有任何调试器。</p>
+
+        <p>那一次我才发现：<mark>这三十行里藏着芯片型号、晶振频率、内存余量、Flash 分区和编译参数</mark>，
+          全部是硬件层面的信息，不用写一行代码就能读到。它是这台设备失控之前，唯一愿意开口说话的时刻。</p>
+
+        <p>下面按出现的顺序，逐段拆开。</p>
+
+        <h2><span class="h2num">01</span>第一行就是个陷阱</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>uart0 · 115200</span></div>
+    <pre>ets Jul 29 2019 12:21:46</pre>
+        </div>
+
+        <p>2019 年 7 月 29 日。看到这行的人常有两个误解：以为是固件的编译日期，或者以为自己不小心烧录了一个三年前的旧版本。</p>
+
+        <p>都不是。这是 <strong>bootloader 的编译时间戳</strong>——这一段代码由 Espressif 出厂时就固化在芯片里，
+          他们多年没有改动过它，所以这个日期在你的板子上、在我的板子上、在别人刚拆封的新板子上，完全一样。
+          它不是一个会变化的信息，看到它就当没看到。</p>
+
+        <p>真正的固件编译时间是后面 <code>Software Info</code> 里的那一行，我们等会儿会走到那里。</p>
+
+        <h2><span class="h2num">02</span>复位原因与启动模式</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>bootloader</span></div>
+    <pre>rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+    configsip: 0, SPIWP:0xee
+    clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+    mode:DIO, clock div:1</pre>
+        </div>
+
+        <p><code>rst:</code> 后面这个十六进制数是<strong>复位原因</strong>。
+          <code>0x1</code> 是上电复位，也就是你拔插电源、或者按下复位键时会看到的那种；除此之外还有软件复位、
+          看门狗复位、欠压复位等等。这一行是排查「设备莫名其妙重启」的起点：
+          如果是看门狗，说明你的某段代码把 CPU 卡住了；如果指向欠压，那就去查电源——
+          我在<a href="/posts/serial-log-day.html">另一篇笔记</a>里就是靠这个思路找到电源问题的。
+          完整的码表在 ESP-IDF 的 <code>esp_reset_reason()</code> 文档里，不用背。</p>
+
+        <p><code>boot:0x13</code> 是启动模式，括号里的 <code>SPI_FAST_FLASH_BOOT</code> 才是给人看的部分——
+          意思是「从 SPI Flash 里快速启动」，这是正常工作时的取值。
+          如果你把它做成产品，客户不小心把某个引脚拉低了，这里会变成别的模式，
+          然后就表现为「板子通电没反应」。</p>
+
+        <p>中间那两行 <code>configsip</code>、<code>clk_drv</code> 之类，是 bootloader 读到的 Flash 配置
+          和各信号线的驱动能力。它们平时是固定的，只有在<em>换了 Flash 芯片或者改了硬件</em>之后才会变——
+          所以它们的用途是「记住正常时的样子」，将来出问题了拿来对比。</p>
+
+        <p>最后 <code>mode:DIO, clock div:1</code> 值得注意：bootloader 阶段这里用的是 <strong>DIO（双线）</strong>，
+          而几分钟后你会看到 Flash Info 里写的是 <strong>QIO（四线）</strong>。
+          这不矛盾——ROM 阶段还没能力协商，只好用最保守的方式先把代码读进来，之后才切到更快的模式。</p>
+
+        <h2><span class="h2num">03</span>三段 load：镜像有没有坏</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>bootloader</span></div>
+    <pre>load:0x3fff0030,len:4876
+    load:0x40078000,len:16560
+    load:0x40080400,len:3500
+    entry 0x400805b4</pre>
+        </div>
+
+        <p>这是 bootloader 把自己从 Flash 搬进内存的过程：地址、长度、三段。
+          平时完全不用管，但有一种情况例外——<strong>如果这三行里出现校验失败或者长度异常，说明 Flash 里的镜像损坏了</strong>，
+          常见原因是烧录到一半拔线、或者供电不稳写坏了页。</p>
+
+        <p><code>entry</code> 是跳转到应用程序入口的地址。看到它出现，就意味着「bootloader 干完了，接下来是固件的事」。</p>
+
+        <p>所以判断一个「通电没反应」的板子卡在哪一层，看日志停在哪一行就知道了：
+          停在 <code>rst:</code> 附近是 bootloader 阶段的问题，停在 <code>entry</code> 之后就是固件的问题。</p>
+
+        <h2><span class="h2num">04</span>芯片信息：你手上到底是什么</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>Chip Info</span></div>
+    <pre>  Model             : ESP32
+      Package           : D0WD-Q5
+      Revision          : 3.01
+      Cores             : 2
+      CPU Frequency     : 240 MHz
+      XTAL Frequency    : 40 MHz
+      Embedded Flash    : No
+      Embedded PSRAM    : No
+      2.4GHz WiFi       : Yes
+      Classic BT        : Yes</pre>
+        </div>
+
+        <p><code>Package: D0WD-Q5</code> 给出的是这颗 die 的型号和封装代号。
+          它有用是因为——模组厂商在同一个「ESP32-WROOM-32」的名字下，装过不同批次的芯片，
+          而某些低功耗特性、蓝牙行为在修订版之间有差异。<code>Revision: 3.01</code> 就是芯片的修订版号。</p>
+
+        <p><code>XTAL Frequency: 40 MHz</code> 是外部晶振。往下拉几行你会看到固件启动时打印的一句：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>esp32-hal-cpu.c</span></div>
+    <pre>[     3][D][esp32-hal-cpu.c:324] setCpuFrequencyMhz(): PLL: 480 / 2 = 240 Mhz, APB: 80000000 Hz</pre>
+        </div>
+
+        <p>240 MHz 是怎么来的，日志直接告诉你了：480 MHz 的 PLL 二分频。
+          方括号里的 <code>3</code> 是开机后的毫秒数——三毫秒，它已经把主频设好了。</p>
+
+        <p>另外 <code>Embedded Flash: No</code> 和 <code>Embedded PSRAM: No</code> 这两行，
+          是回答「我这颗芯片到底带不带内置 Flash / PSRAM」的最快方式，
+          比查数据手册快得多——尤其是当你手上只有一块来源不明的开发板时。</p>
+
+        <h2><span class="h2num">05</span>内存：为什么不是 520 KB</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>INTERNAL Memory Info</span></div>
+    <pre>  Total Size        :   376480 B ( 367.7 KB)
+      Free Bytes        :   333984 B ( 326.2 KB)
+      Allocated Bytes   :    34744 B (  33.9 KB)
+      Minimum Free Bytes:   328368 B ( 320.7 KB)
+      Largest Free Block:   110580 B ( 108.0 KB)</pre>
+        </div>
+
+        <p>ESP32 的 SRAM 标称 520 KB，这里却只有 367.7 KB。差额不是被谁偷了——
+          它是 ROM 里的代码、启动时的静态分配、以及协议栈占掉的部分。
+          所以这一行反映的是<strong>「系统初始化之后，留给动态分配的堆总量」</strong>，比标称值更接近你能用的现实。</p>
+
+        <p>这五个数字里，我认为最该盯的是最后两个，而不是 <code>Free Bytes</code>：</p>
+
+        <ul>
+          <li><strong>Minimum Free Bytes</strong> 是历史最低水位。设备跑了一整天之后回来看这个值，
+            就知道它最紧张的时候剩下多少——这个数字比「当前还剩多少」有意义得多。</li>
+          <li><strong>Largest Free Block</strong> 是<em>最大的一块连续空闲</em>。总共剩 326 KB，
+            但最大连续块只有 108 KB，意味着你想 <code>malloc</code> 一个 200 KB 的缓冲区会失败，
+            <mark>尽管「总空闲」看起来完全够</mark>。内存碎片就是这么咬人的。</li>
+        </ul>
+
+        <p>那一次我遇到的「跑几小时就自己重启」，最后就是靠这两行定位的：
+          Free 一直在 300 KB 以上，看着很健康，但 Largest Free Block 从 108 KB 一路缩到 30 多 KB，
+          最后某个需要连续内存的操作失败，触发了复位。</p>
+
+        <h2><span class="h2num">06</span>分区表：一本地址账本</h2>
+
+        <p>这是我后来觉得最值得看的一段。它把整块 Flash 按地址切给了不同用途：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>Partitions Info</span></div>
+    <pre>                nvs : addr: 0x00009000, size:    20.0 KB, type: DATA, subtype: NVS
+                otadata : addr: 0x0000E000, size:     8.0 KB, type: DATA, subtype: OTA
+                   app0 : addr: 0x00010000, size:  1280.0 KB, type:  APP, subtype: OTA_0
+                   app1 : addr: 0x00150000, size:  1280.0 KB, type:  APP, subtype: OTA_1
+                 spiffs : addr: 0x00290000, size:  1408.0 KB, type: DATA, subtype: SPIFFS
+               coredump : addr: 0x003F0000, size:    64.0 KB, type: DATA, subtype: COREDUMP</pre>
+        </div>
+
+        <p>把地址当成账目来核对一遍，你会发现它严丝合缝：</p>
+
+        <ul>
+          <li><code>app0</code> 从 <code>0x010000</code>（64 KB）开始，占 1280 KB，结束于 64 + 1280 = 1344 KB = <code>0x150000</code>；</li>
+          <li>这正好是 <code>app1</code> 的起始地址。app1 再加 1280 KB，到 2624 KB = <code>0x290000</code>；</li>
+          <li>这正好是 <code>spiffs</code> 的起始地址。spiffs 加 1408 KB，到 4032 KB = <code>0x3F0000</code>；</li>
+          <li>这正好是 <code>coredump</code> 的起始地址。再加 64 KB ——<strong>刚好 4096 KB，也就是 4 MB</strong>。</li>
+        </ul>
+
+        <p>一个字节不多，一个字节不少。这说明<em>分区表不是随便填的，它是按芯片容量精算出来的</em>。
+          看懂这本账，你就能回答两个很实际的问题：</p>
+
+        <p><strong>第一，我的固件还能长多大？</strong> app0 和 app1 各 1280 KB，
+          意味着你的固件必须同时塞进这两个槽（OTA 需要备份槽），所以<strong>上限就是 1280 KB</strong>。
+          编译时如果报 <code>Sketch too big</code>，数字就是从这里来的。</p>
+
+        <p><strong>第二，文件存储还剩多少？</strong> <code>spiffs</code> 的 1408 KB 就是你能用来存图片、
+          日志、配置文件的全部空间。它不会随着你的固件变大而变大——它是固定的。</p>
+
+        <p>顺带一提，<code>coredump</code> 那 64 KB 是留给崩溃现场快照的。
+          如果它在账本里被删掉了，你的设备崩溃时就不会留下可分析的转储。</p>
+
+        <h2><span class="h2num">07</span>最后几行：找出日志为什么这么多</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>Software / Board Info</span></div>
+    <pre>  Compile Date/Time : Aug 21 2026 01:37:10
+      Compile Host OS   : windows
+      ESP-IDF Version   : v5.5.4
+      Arduino Version   : 3.3.10
+
+      Arduino FQBN      : esp32:esp32:esp32:UploadSpeed=921600,CPUFreq=240,
+                          FlashFreq=80,FlashMode=qio,FlashSize=4M,PartitionScheme=default,
+                          DebugLevel=verbose,PSRAM=disabled,LoopCore=1,EventsCore=1,EraseFlash=none</pre>
+        </div>
+
+        <p><code>Compile Date/Time</code> 才是真正的固件编译时间。
+          「我明明改了代码，怎么行为没变？」——先看这一行。它没变，说明你烧的不是你以为的那个固件。</p>
+
+        <p>而 FQBN 那一长串，是整个启动日志里最实用的一行，因为它把你的<strong>编译选项全部抄了一遍</strong>：
+          上传波特率、主频、Flash 频率与模式、Flash 容量、分区方案，一个不落。</p>
+
+        <p>如果你好奇「为什么我的串口刷得这么快、全是 <code>[V]</code> 开头的行」——
+          答案就在里面：<code>DebugLevel=verbose</code>。这是 Arduino IDE 里
+          <em>Tools → Core Debug Level</em> 被设成了 verbose 的结果。改成 <code>None</code>，
+          你的串口立刻安静下来，只剩你自己打印的东西：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>verbose 级别的日志长这样</span></div>
+    <pre>[   529][V][esp32-hal-uart.c:807] uartSetPins(): UART0: Driver not yet installed,
+                                    storing pins for later attachment (RX:3, TX:1)
+    [   666][D][esp32-hal-uart.c:882] uartSetPins(): Attaching pin 3 to UART0 as RX
+    [   673][V][esp32-hal-periman.c:173] perimanSetPinBus(): Pin 3 successfully set to
+                                    type UART_RX (2) with bus 0x3ffbdb68</pre>
+        </div>
+
+        <p>这些行在说「把 GPIO3 接到 UART0 的 RX 上」，对调试外设冲突其实有用——
+          它能告诉你某个引脚被谁占用了。但如果你不需要，它就是纯占地方。</p>
+
+        <h2><span class="h2num">08</span>现在我会怎么看这三十行</h2>
+
+        <p>按顺序扫四个地方就够了：</p>
+
+        <ol>
+          <li><code>rst:</code> —— 设备是<strong>为什么</strong>醒过来的。这是排查重启类问题的唯一入口。</li>
+          <li><code>Largest Free Block</code> —— 内存<strong>还有没有可能</strong>分配大块。别只看 Free。</li>
+          <li><code>Partitions Info</code> —— 固件和数据<strong>还有多少空间</strong>。算一遍地址账。</li>
+          <li><code>FQBN</code> 与 <code>Compile Date/Time</code> —— 现在跑的<strong>到底是哪一个</strong>固件、带什么编译选项。</li>
+        </ol>
+
+        <p>这四件事都不需要额外的工具，插上 USB 就能读。
+          对一个没有调试器、板子又开始不听话的下午来说，这已经是很好的起点了。</p>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自 2026 年 8 月的一段串口记录与当时的排查笔记。日志原文来自
+            ESP32-WROOM-32E（ESP-IDF v5.5.4 / Arduino 3.3.10），未作删改。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>补上了 0x3F0000 + 64 KB = 0x400000 的地址核对过程——当初只是觉得「数字对得上」，没有真的算过。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么要看日志而不是看手册。</b> 手册给的是「这颗芯片理论上有什么」，
+            日志给的是「你手上这颗芯片实际上是什么」。当板子来源不明，
+            或者模组厂商换了批次时，后者更可信。
+          </p>
+          <p class="marginnote">
+            <b>串口波特率。</b> 上面这些日志是 115200 打印的，默认就是这个值。
+            如果你改成 921600 追求速度，长导线容易丢字符——
+            我一般只在需要抓时序时才提高波特率，而且线不超过 20 cm。
+          </p>
+          <p class="marginnote">
+            <b>Minimum Free Bytes 才是水位线。</b> 开机瞬间的 Free 很好看，
+            但那不代表稳定。让设备跑一轮完整业务流程，再回来看这两个数字。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/local-27b-on-8gb.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">8 GB 显存里塞一个 27B 模型</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/serial-log-day.html">
+          <span class="relitem__meta">09.14 · 调试笔记</span>
+          <span class="relitem__title">串口日志里的一天</span>
+          <span class="relitem__sum">设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上，才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。</span>
+        </a>
+        <a class="relitem" href="/posts/servo-jitter.html">
+          <span class="relitem__meta">08.05 · 硬件</span>
+          <span class="relitem__title">舵机抖动的三种可能</span>
+          <span class="relitem__sum">同一个角度指令，舵机却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，第三种最意外。</span>
+        </a>
+        <a class="relitem" href="/posts/duplicate-handler.html">
+          <span class="relitem__meta">09.22 · 调试</span>
+          <span class="relitem__title">我改了那个函数，但跑的不是它</span>
+          <span class="relitem__sum">用三组对照排除两个方向，然后撞上有两个实现的 onAtmosphericDataReceived。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="boot-log" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

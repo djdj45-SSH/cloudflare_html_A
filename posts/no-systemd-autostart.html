@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>在没有 systemd 的环境里让服务活下来 — 余量 MARGIN</title>
+<meta name="description" content="systemctl 在 PRoot 里用不了，WSL2 的 DISPLAY 又总是填错。这两个坑其实是同一个问题：先搞清楚这个环境里到底有什么。">
+<link rel="canonical" href="https://margin.pages.dev/posts/no-systemd-autostart.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="在没有 systemd 的环境里让服务活下来 — 余量 MARGIN">
+<meta property="og:description" content="没有 init 系统的时候，「开机自启」该挂在哪儿？">
+<meta property="og:url" content="https://margin.pages.dev/posts/no-systemd-autostart.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">环境 · No.09 · PRoot / WSL2</div>
+      <h1>在没有 systemd 的环境里让服务活下来</h1>
+      <p class="standfirst">敲过无数次的 systemctl enable 第一次失败，是在一台跑在 Android 手机里的 Ubuntu 上。既然没有 init 系统，就不会有人来读你的开机自启清单。</p>
+      <div class="byline">
+        <span><time datetime="2026-08-15">2026.08.15</time></span>
+        <span class="dot"></span><span data-readtime>约 8 分钟</span>
+        <span class="dot"></span><span>2,750 字</span>
+        <span class="dot"></span><span>PRoot (Android) · WSL2</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/env.html">环境</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">在一台 Android 手机里跑的 Ubuntu 上，我想让 SSH 服务跟着开机自动起来。
+          于是我敲下那句在服务器上敲了无数次的命令：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>习惯性尝试</span></div>
+    <pre>$ systemctl enable ssh
+    System has not been booted with systemd as init system (PID 1). Can't operate.</pre>
+        </div>
+
+        <p>这台 Ubuntu 跑在 PRoot 里。PRoot 不是一个真正的容器——它更像一个
+          <strong>把系统调用翻译过去的用户态工具</strong>，没有内核隔离，也没有 PID 1。
+          既然没有 init 系统，就不会有人来读你的「开机自启清单」。</p>
+
+        <p>所以问题变成了：<em>在一个没有 init 的环境里，「开机」这件事该挂在哪儿？</em></p>
+
+        <h2><span class="h2num">01</span>把启动挂到「你进来」的那一刻</h2>
+
+        <p>没有 init，但有别的东西一定会被执行：<strong>登录 shell 的启动脚本</strong>。
+          在 PRoot 这种环境里，你每次打开终端（或者通过 SSH 连进来），
+          <code>~/.bashrc</code> 都会被读取一遍。</p>
+
+        <p>把它当成一个「开机钩子」用就行了：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>写入 ~/.bashrc</span></div>
+    <pre>echo 'if ! pgrep -x "sshd" &gt; /dev/null; then /usr/sbin/sshd -o Port=2222 -o UsePAM=no -o PermitRootLogin=yes -o PasswordAuthentication=yes &amp; fi' &gt;&gt; ~/.bashrc</pre>
+        </div>
+
+        <p>这行命令有点长，拆开看就三件事：</p>
+
+        <ul>
+          <li><code>pgrep -x "sshd"</code> —— 先问一句「sshd 已经在跑了吗」。
+            <strong>这是幂等性的来源</strong>：如果每次开终端都无条件启动一次，
+            第二次就会因为端口被占用而失败，屏幕上一串报错。</li>
+          <li>只有没在跑的时候，才执行后面的启动命令。注意这里是 <code>sshd</code>
+            而不是 <code>service ssh start</code>——既然没有 init，就绕过它，直接叫二进制。</li>
+          <li>结尾的 <code>&amp;</code> 让 sshd 转到后台。少了它，你的终端会被 sshd 占住，
+            看起来像卡死了。</li>
+        </ul>
+
+        <p>验证一下写进去了没有：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>确认</span></div>
+    <pre>$ tail -n 3 ~/.bashrc</pre>
+        </div>
+
+        <h2><span class="h2num">02</span>这个方案的边界，得说清楚</h2>
+
+        <p>它不是万能的。由于钩子挂在「登录 shell」上，启动时机取决于<strong>你什么时候进这个环境</strong>：</p>
+
+        <ul>
+          <li>你打开 App 进入 Ubuntu → SSH 跟着起来，正常。</li>
+          <li>手机整个关机再开机 → 你得先手动打开 App 进一次 Ubuntu，SSH 才会起来。</li>
+        </ul>
+
+        <p>也就是说，它解决的是「不用每次手敲那串长命令」，不是「真正意义上的开机自启」。
+          在 PRoot 这种没有内核支持的环境里，后者本来就做不到——不丢人，知道边界就行。</p>
+
+        <blockquote>
+          <p>由此得到一个可以复用的判断：<strong>没有 init 系统时，把「启动」挂到任何一个必然发生的生命周期事件上</strong>——
+            登录 shell、cron 的 <code>@reboot</code>、supervisor，或者干脆在你自己的主程序里守护。
+            不要试图安装一个 systemd，那是往错误的方向使劲。</p>
+        </blockquote>
+
+        <h2><span class="h2num">03</span>顺带说说同一类环境里的另一个坑：DISPLAY</h2>
+
+        <p>在 WSL2 里跑图形程序（RViz、turtlesim）时，会遇到一模一样性质的问题：
+          Linux 侧的 GUI 程序需要一个 <code>DISPLAY</code> 变量，告诉它「把窗口画到哪台机器的屏幕上」。</p>
+
+        <p>这个变量的正确值，就是<strong>Windows 主机的 IP</strong> 加上 <code>:0</code>。
+          难点在于怎么把这个 IP 拿到——WSL2 每次重启，这个地址都会变。</p>
+
+        <p>最可靠的取法是<strong>默认网关</strong>，因为 WSL2 的默认网关就是 Windows 主机：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>取 IP 并设置</span></div>
+    <pre><span class="c"># 方法一：默认网关（最可靠）</span>
+    export DISPLAY=$(ip route | grep default | awk '{print $3}'):0
+
+    <span class="c"># 方法二：如果上面取到的是空，用 resolv.conf 的第二个 nameserver</span>
+    export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | sed -n '2p' | awk '{print $2}'):0</pre>
+        </div>
+
+        <p>为什么强调「第二个」？因为 <code>/etc/resolv.conf</code> 里通常有两个以上的 nameserver，
+          而<strong>第一个往往是 DNS 服务器，不是 Windows 主机</strong>。
+          曾经有人（在我之前）套用网上的命令取了第一个，结果 <code>DISPLAY</code> 变成了
+          <code>223.5.5.5:0</code>——一个公网 DNS 的地址。程序当然连不上，但它不会告诉你「你填错 IP 了」，
+          只会沉默或者报一个看不懂的 X11 错误。</p>
+
+        <p>所以设置完一定要验证一眼：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>验证</span></div>
+    <pre>$ echo $DISPLAY
+    172.27.192.1:0          <span class="c"># 对：私网地址 + :0</span>
+    223.5.5.5:0             <span class="c"># 错：这是 DNS</span>
+    :0                      <span class="c"># 错：空变量</span></pre>
+        </div>
+
+        <p>要让它每次开终端都自动生效，同样是往 <code>.bashrc</code> 里塞一行。
+          这里有个转义上的小麻烦——<code>awk</code> 里的 <code>$3</code> 会被 shell 提前展开，
+          所以写成外面双引号、里面转义的组合：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>永久生效</span></div>
+    <pre>echo 'export DISPLAY=$(ip route | grep default | awk "{print \$3}"):0' &gt;&gt; ~/.bashrc
+    source ~/.bashrc</pre>
+        </div>
+
+        <p>如果 WSL 走的是无线网卡、默认网关这条路取不到，也可以直接写死 Windows 的局域网 IP，
+          比如 <code>export DISPLAY=192.168.1.5:0</code>——
+          代价是 Windows 换网络之后要手动改。</p>
+
+        <h2><span class="h2num">04</span>两个坑，一条共同的线</h2>
+
+        <p>把这两件事放在一起看，它们是同一个问题：</p>
+
+        <p><strong>Windows 侧和 Linux 侧对「环境」的理解不一样。</strong>
+          PRoot 里没有 init，所以没有「开机」这个概念可供挂钩；
+          WSL2 里的网络是虚拟化的，所以主机地址需要推导而不是写死。</p>
+
+        <p>遇到这类问题的排查顺序，我现在会这么做：</p>
+
+        <ol>
+          <li>先问<strong>这个环境里到底有什么</strong>——有 init 吗？网络是谁在管？IP 从哪来？</li>
+          <li>再找<strong>一个一定会发生的事件</strong>当挂载点（登录、重启、进程启动）。</li>
+          <li>最后<strong>把结果打印出来验证</strong>，不要假设它生效了。上面 <code>echo $DISPLAY</code>
+            那三行对比，就是这一步的模板。</li>
+        </ol>
+
+        <p>第三步尤其重要。这两个坑的共同点都是「命令执行成功了，但事情没成」——
+          <code>systemctl</code> 是明确报错的，算好运气；而 <code>DISPLAY</code> 填错了，
+          它一声不吭，你只会看到程序打不开窗口。</p>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自 2026 年 8 月的三段便签记录（PRoot 下的 sshd 自启、WSL2 取主机 IP、图形界面显示问题）。
+            环境各不相同，命令请按自己的发行版和网络情况调整。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>把三段笔记合并时才发现它们的结构是一样的：
+            都是「在不标准的环境里，找一个标准事件当钩子」。这条线比单个命令更值得留下。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么用 <code>pgrep -x</code> 而不是 <code>ps | grep</code>。</b>
+            <code>-x</code> 要求进程名完全匹配，避免把 <code>grep</code> 自己
+            或者名字里含 sshd 的其他进程算进去。写守护脚本时这个细节能省掉一类误判。
+          </p>
+          <p class="marginnote">
+            <b>关于 <code>-o UsePAM=no</code>。</b>
+            在 PRoot 这种缺失部分 PAM 支持的环境里，让 sshd 走 PAM 容易认证失败。
+            关掉它、改用密码直连，是这类受限环境里的常见取舍——
+            代价是安全性下降，别在公网上这么干。
+          </p>
+          <p class="marginnote">
+            <b>WSL2 的 IP 每次重启都变。</b>
+            所以不要写死在配置文件里，除非你愿意每次重启后去改一遍。
+            用默认网关动态取，是这个环境里唯一省心的做法。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/phone-as-host.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">把手机变成 ROS 2 上位机</span>
+      </a>
+      <a href="/posts/wifi-ros2-latency.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">Wi-Fi 上跑 ROS 2，是一种什么体验</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/phone-as-host.html">
+          <span class="relitem__meta">08.13 · 环境</span>
+          <span class="relitem__title">把手机变成 ROS 2 上位机</span>
+          <span class="relitem__sum">neofetch 的三条线索、三个坑，以及实测出来的 0.5 Hz。</span>
+        </a>
+        <a class="relitem" href="/posts/micro-ros-agent.html">
+          <span class="relitem__meta">08.13 · 通信</span>
+          <span class="relitem__title">micro_ros_agent 装不上的三个原因</span>
+          <span class="relitem__sum">没有 apt 包、shell 没 source、GitHub 通道被拦——三件事在终端里长得一模一样。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="no-systemd-autostart" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

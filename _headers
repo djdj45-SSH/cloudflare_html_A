@@ -1,0 +1,21 @@
+# Cloudflare Pages 自定义响应头
+# 语法：路径匹配后换行缩进写头字段。详见 README「配置文件说明」。
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+/*.xml
+  Cache-Control: public, max-age=3600
+
+/*.svg
+  Cache-Control: public, max-age=604800
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

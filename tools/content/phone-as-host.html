@@ -1,0 +1,298 @@
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">事情起因很简单：我不想每次调试都开电脑。</p>
+
+    <p>车在地板上、雷达在桌角、ESP32 插着充电宝——这套东西要动起来，传统上还需要一台笔记本当上位机，
+      跑 ROS 2、开 Agent、看着话题。而如果上位机能塞进口袋呢？需要的时候掏出来，
+      接个扩展坞，整套系统就活了。</p>
+
+    <p>所以我用一部旧手机试了。这篇记录的是它到底能不能干活，以及过程中撞上的三个坑。</p>
+
+    <h2><span class="h2num">01</span>先搞清楚：这台"Ubuntu"到底是什么</h2>
+
+    <p>第一次登录进去，<code>neofetch</code> 打出来的东西就有点不对劲：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>终端 · neofetch</span></div>
+<pre>OS:        Ubuntu 26.04 LTS (Resolute Raccoon) aarch64
+Kernel:    Linux 5.15.197-gdf5e768acfe9-dirty
+Packages:  2117 (dpkg)
+Shell:     bash 5.3.9
+Terminal:  libproot.so
+CPU:       Cortex-A510+Cortex-A715+Cortex-A710+Cortex-X3 (1+4+3) @ 3.19 GHz
+GPU:       Qualcomm Turnip Adreno (TM) 740 [Integrated]
+Memory:    5.93 GiB / 10.94 GiB (54%)</pre>
+    </div>
+
+    <p>里面有三条线索，拼起来指向同一个结论：</p>
+
+    <ul>
+      <li><strong><code>Terminal: libproot.so</code></strong> —— 这一行最直白。
+        正常的终端会显示 <code>pts/0</code> 或 <code>/dev/tty1</code>，
+        这里显示的是一个动态库的名字。意思是：<em>我没跑在真终端上，而是跑在一个用户态模拟层里</em>。
+        PRoot 就是干这个的——它把系统调用翻译一遍，让一个 ARM64 的 Linux rootfs
+        以为自己在一台独立的机器上，实际上内核是共用的。</li>
+      <li><strong><code>Kernel: 5.15.197-gdf5e768acfe9-dirty</code></strong> —— 这个内核版本号对不上。
+        Ubuntu 26.04 应该配的是 6.x 甚至更新的内核，而 5.15 这个分支是好几年前的 LTS。
+        原因是：这个内核不是 Ubuntu 的，是<strong>宿主机（Android）的内核</strong>被直接借用了。
+        PRoot 不提供内核，它只能复用宿主的内核。</li>
+      <li><strong>CPU 那一行</strong> —— <code>Cortex-A510 + A715 + A710 + X3 (1+4+3)</code>，
+        配合 <code>Adreno 740</code>，这是<strong>手机 SoC</strong> 的典型构成
+        （一颗超大核 + 四颗大核 + 三颗小核），而不是任何 x86 笔记本的形态。
+        10.94 GiB 内存也像是 12 GB 手机的可用部分。</li>
+    </ul>
+
+    <p>所以结论很明确：<mark>这是一台 Android 手机，里面用 PRoot 跑着一个 Ubuntu rootfs</mark>。
+      它不是虚拟机，没有独立内核；它也不是 Docker，没有命名空间隔离。
+      它就是「换了个根目录的一堆进程」。</p>
+
+    <blockquote>
+      <p>这三个线索的排法值得记住：<strong>先看终端类型，再看内核版本，最后看 CPU 布局</strong>。
+        顺序不重要，重要的是——只要其中一条对不上"正常电脑"的样子，你就该怀疑自己在容器里。</p>
+    </blockquote>
+
+    <h2><span class="h2num">02</span>装：aarch64 上装 ROS 2</h2>
+
+    <p>ROS 2 这部分我用了「一键安装」脚本（小鱼的那个），在手机上跑 <code>wget</code> 下载再执行：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>安装 ROS 2</span></div>
+<pre>wget http://fishros.com/install -O fishros &amp;&amp; . fishros</pre>
+    </div>
+
+    <p>aarch64 平台的包是齐的，装完 <code>ros2 --help</code> 能正常输出，说明核心组件都到位了。
+      这一点比预想中顺利——毕竟这几年 ARM64 的服务器和开发板已经很常见，
+      发行版维护者基本都会同步构建。</p>
+
+    <p>真正麻烦的是后面三步，它们都和「这个环境不是一台正常电脑」有关。</p>
+
+    <h2><span class="h2num">03</span>坑一：发行版名字写错了一个字母</h2>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>第一次 source</span></div>
+<pre>bash: /opt/ros/lirical/setup.bash: No such file or directory</pre>
+    </div>
+
+    <p>我把发行版名字拼错了。ROS 2 的发行版是按字母顺序起的（首字母递增），
+      拼写一次错就会得到一个"文件不存在"，而那个报错不会提醒你"名字可能是错的"——
+      它只会说找不到这个路径，让你去怀疑是不是没装成功。</p>
+
+    <p>更快的方法是直接去看目录：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>确认发行版</span></div>
+<pre>ls /opt/ros/</pre>
+    </div>
+
+    <p>里面那个目录名就是你要 <code>source</code> 的东西。<em>别背发行版名字，去看目录</em>——
+      这是我在这种事情上唯一稳定的做法。</p>
+
+    <h2><span class="h2num">04</span>坑二：Agent 编译，和一次"看起来改了其实没改"</h2>
+
+    <p>micro-ROS Agent 需要从源码编译（它不在 apt 里）。在 aarch64 上编译时撞了依赖冲突，
+      我最后记下的解决方案步骤是这样的：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>记录为「强制使用内置 fmt」的那套步骤</span></div>
+<pre>cd ~/microros_ws
+rm -rf build install log
+rm -rf src/micro_ros_setup          <span class="c"># 连克隆下来的源码也删掉重新拉</span>
+
+cd src
+git clone https://github.com/micro-ROS/micro_ros_setup.git
+
+cd ~/microros_ws
+rosdep update
+rosdep install --from-paths src --ignore-src -y
+colcon build
+source install/setup.bash</pre>
+    </div>
+
+    <p>当时我把这套步骤记成了「强制使用内置 fmt」——因为报错指向的是 fmt 库的版本冲突。</p>
+
+    <p>但现在回头读这段记录，我发现一个矛盾：<strong>这套步骤里没有任何一处改到了 fmt 相关的配置</strong>。
+      真正做的事只有一件——<em>把 <code>build</code>、<code>install</code>、<code>log</code> 和一个源码目录全部删掉，重新来一遍</em>。</p>
+
+    <p>所以我现在的判断是：那个报错来自<strong>上一次构建留下的残留</strong>，
+      而不是 fmt 本身需要"强制"。删干净之后重新构建，自然就好了。
+      把它记成"强制内置 fmt"容易让人以为是改了编译选项，其实改的是缓存。</p>
+
+    <blockquote>
+      <p>由此有一条我一直在用的规则：<strong>遇到依赖冲突，先清干净再看一遍报错。</strong>
+        如果清干净之后报错消失了，那说明问题出在残留物上；
+        如果报错还在，你才拿到了一个"干净的复现步骤"。</p>
+    </blockquote>
+
+    <h2><span class="h2num">05</span>坑三：没有 systemd，SSH 得自己叫起来</h2>
+
+    <p>PRoot 里没有 systemd（连 PID 1 都不是它），所以 <code>sudo systemctl start ssh</code> 是无效的。
+      直接叫二进制：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>手动起 sshd</span></div>
+<pre>sudo apt update &amp;&amp; sudo apt install openssh-server -y
+
+sudo mkdir -p /var/run/sshd
+sudo /usr/sbin/sshd -o Port=2222 -o UsePAM=no \
+     -o PermitRootLogin=yes -o PasswordAuthentication=yes
+
+ps aux | grep sshd            <span class="c"># 确认起来了</span>
+ip a                          <span class="c"># 查本机 IP</span></pre>
+    </div>
+
+    <p>从电脑上连：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>~/.ssh/config</span></div>
+<pre>Host android-ubuntu
+    HostName 192.168.31.161
+    User root
+    Port 2222
+    ForwardX11 yes
+    ForwardX11Trusted yes</pre>
+    </div>
+
+    <p><code>ForwardX11</code> 那两行是为了传图形界面——手机上跑 RViz 不现实，
+      但可以通过 X11 转发把窗口丢到电脑屏幕上显示。
+      顺手把这段启动命令写进 <code>~/.bashrc</code>，就变成"每次进去自动起 SSH"了。</p>
+
+    <h2><span class="h2num">06</span>跑起来是什么样</h2>
+
+    <p>Agent 启动，ESP32 连上，会话建立的日志和在任何一台电脑上跑没有任何区别：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>Agent · 手机侧</span></div>
+<pre>info | UDPv4AgentLinux.cpp | init              | running...          | port: 8888
+info | Root.cpp            | create_client     | create              | client_key: 0x296A6185
+info | SessionManager.hpp  | establish_session | session established | address: 192.168.31.20:47138
+info | ProxyClient.cpp     | create_participant| participant created | participant_id: 0x000(1)
+info | ProxyClient.cpp     | create_topic      | topic created       | topic_id: 0x000(2)
+info | ProxyClient.cpp     | create_publisher  | publisher created   | publisher_id: 0x000(3)
+info | ProxyClient.cpp     | create_subscriber | subscriber created  | subscriber_id: 0x000(4)
+info | ProxyClient.cpp     | create_datareader | datareader created  | datareader_id: 0x000(6)</pre>
+    </div>
+
+    <p>数据也是通的：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>终端 · 手机侧</span></div>
+<pre>root@Ubuntu:~# ros2 topic echo /robot/ping
+data: ping from ESP32
+---
+data: ping from ESP32
+---
+root@Ubuntu:~# ros2 topic pub /robot/pong std_msgs/String "data: 'hello from PC'" --once
+publishing #1: std_msgs.msg.String(data='hello from PC')</pre>
+    </div>
+
+    <p>但有一个细节值得单独说：<code>ros2 topic list</code> 的输出是这样的——</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>ros2 topic list</span></div>
+<pre>/parameter_events
+/rosout</pre>
+    </div>
+
+    <p><strong>ESP32 那边的话题一个都没出现</strong>，可上面 <code>echo</code> 明明收到了数据。
+      这不是故障：micro-ROS 的话题挂在 Agent 的会话里，而 <code>topic list</code> 依赖 DDS 的发现机制，
+      当某个话题只有订阅端、没有发布者时，被发现的时间会延迟，甚至暂时不列出。
+      用 <code>ros2 topic pub</code> 真的发一条，或者直接 <code>echo</code>，才是可靠的验证方式。</p>
+
+    <p>频率方面的实测：</p>
+
+    <div class="codeblock">
+      <div class="codeblock__bar"><span>ros2 topic hz /robot/ping</span></div>
+<pre>average rate: 0.533     min: 1.875s max: 1.875s std dev: 0.00000s window: 1
+average rate: 0.676     min: 1.085s max: 1.875s std dev: 0.39528s window: 2
+average rate: 0.756     min: 1.009s max: 1.875s std dev: 0.39180s window: 3
+average rate: 0.674     min: 1.009s max: 1.964s std dev: 0.43831s window: 4</pre>
+    </div>
+
+    <p>大约 0.5 到 0.75 Hz，最慢的间隔接近 2 秒，标准差 0.4 秒左右。也就是说：
+      <mark>链路是通的，但节奏很鬆</mark>。对 ping/pong 测试无所谓，
+      对需要稳定周期的控制指令就不够了——这和我在
+      <a href="/posts/wifi-ros2-latency.html">另一篇笔记</a>里追过的局域网延迟是同一类问题。</p>
+
+    <h2><span class="h2num">07</span>它的边界在哪</h2>
+
+    <p>用了几天之后，我对这台"口袋上位机"的能力有了比较清楚的边界认知：</p>
+
+    <table>
+      <thead>
+        <tr><th>能做</th><th>不能做</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>跑 Agent、收发话题、<code>ros2 topic</code> 全套命令</td>
+          <td><strong>有线串口</strong>——写这段时我才确认，手机的 USB 口在未 root 的情况下拿不到 <code>/dev/ttyUSB*</code></td>
+        </tr>
+        <tr>
+          <td>SSH 进去当一台无头服务器用</td>
+          <td>RViz 这类图形工具（可以 X11 转发到电脑，但那就不是"便携"了）</td>
+        </tr>
+        <tr>
+          <td>通过 X11 转发显示单个窗口</td>
+          <td>长时间高负载——手机的散热和电池都不是为这个设计的</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>有线串口这一条是最实际的限制。原因不在软件，在于 Android 对 USB 设备的权限控制：
+      没有 root，普通应用拿不到串口设备节点。绕不过去，所以最终只能走 WiFi——
+      而 WiFi 的稳定性又是另一个话题了。</p>
+
+    <h2><span class="h2num">08</span>所以，值不值</h2>
+
+    <p>我的判断是：<strong>作为"随身应急上位机"，值；作为主力开发机，不值。</strong></p>
+
+    <p>值得的地方在于它解决了一个具体问题——当你想在客厅地板上调车、
+      又不想搬电脑的时候，掏出一部手机就够了。整套 ROS 2 环境它跑得动，
+      Agent 能起来，话题能收发，这些已经覆盖了"看一眼数据"的需求。</p>
+
+    <p>不值的地方在于三个结构性限制：没有 systemd（所有服务都要手动管）、
+      没有 USB（只能无线）、没有图形界面（只能远程）。
+      这三条不是配置问题，是 PRoot 这个方案的固有边界。</p>
+
+    <p>写这段的时候我在便签里留了一句话，我觉得它比任何总结都准确：</p>
+
+    <blockquote>
+      <p>「很明显我的上位机不是文档里所说的上位机。小问题，上位机能用就行了嘛。」</p>
+    </blockquote>
+
+    <p>标准意义上的上位机是工控机或者笔记本：有串口、有系统服务、有屏幕。
+      这台手机三条都不满足。但它的确能收发 ROS 2 话题——那就够了。
+      关键是要知道自己在哪个边界之内工作，而不是假装边界不存在。</p>
+
+    <dl class="revision">
+      <dt>关于本文</dt>
+      <dd>整理自 2026 年 8 月 13 日创建、8 月 29 日更新的一段便签，
+        内含当时的终端输出与 Agent 日志原文。设备为一部 PRoot 环境下的 Android 手机。</dd>
+      <dt>2026.09.20 整理</dt>
+      <dd>重读时改了一处结论：把「强制使用内置 fmt」改成了「先清干净再构建」。
+        原始记录里的步骤和它自己的标题对不上，而真正起作用的显然是清理。</dd>
+    </dl>
+  </div>
+
+  <aside class="notes">
+    <div class="notes__inner">
+      <div class="notes__toc"></div>
+      <p class="marginnote" style="margin-top:20px">
+        <b>PRoot 和 Docker 差在哪。</b>
+        Docker 用内核提供的命名空间和 cgroup 做隔离，容器里看到的是一套独立的内核视图；
+        PRoot 什么都不隔离，它用 <code>ptrace</code> 拦截系统调用、改写路径，
+        让进程"以为"根目录变了。所以它不需要 root，但也没有真正的隔离。
+      </p>
+      <p class="marginnote">
+        <b>为什么内核版本是最可靠的线索。</b>
+        发行版版本可以随便改（改 <code>/etc/os-release</code> 就行），
+        但内核是宿主的，容器里改不动。看到"新发行版 + 老内核"这种组合，
+        基本可以直接判定是模拟环境。
+      </p>
+      <p class="marginnote">
+        <b>0.5 Hz 意味着什么。</b>
+        每秒半次，间隔几乎全是秒级。遥测数据（比如缓慢变化的状态量）能接受，
+        任何闭环控制都不行。判断链路能不能用，先看标准差，不只看平均值。
+      </p>
+    </div>
+  </aside>
+</div>

@@ -1,0 +1,318 @@
+{
+  "site": {
+    "name": "余量",
+    "latin": "MARGIN",
+    "url": "https://margin.pages.dev",
+    "email": "hello@example.com",
+    "commentsApi": ""
+  },
+  "posts": [
+    {
+      "slug": "serial-log-day",
+      "title": "串口日志里的一天",
+      "date": "2026-09-14",
+      "category": "调试笔记",
+      "tech": "ESP32 / micro-ROS",
+      "listCategory": "",
+      "description": "ESP32 上的 micro-ROS 客户端每 40 秒掉线一次。查了三天 Wi-Fi，最后问题出在电源：一次 3.2 秒的串口沉默，指向了 USB 线上的压降。",
+      "ogDescription": "每 40 秒掉线一次。查了三天 Wi-Fi，最后问题出在电源。",
+      "standfirst": "设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上， 才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。",
+      "summary": "",
+      "keywords": "串口日志里的一天 serial log esp32 micro-ros 掉线 电源 调试 雷达 万用表",
+      "stack": "固件 v2.8 · ESP32-WROOM-32E · micro_ros_arduino 2.0.8-humble",
+      "readtime": "约 12 分钟",
+      "words": "2,860",
+      "dateText": "2026.09.14",
+      "cover": "serial-log-day.svg",
+      "featureSummary": "设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上， 才发现沉默的那 3.2 秒里，藏着一个和电源有关的答案——而不是我一直盯着的 Wi-Fi。",
+      "tags": [
+        "esp32",
+        "micro-ros",
+        "debug"
+      ]
+    },
+    {
+      "slug": "wifi-ros2-latency",
+      "title": "Wi-Fi 上跑 ROS 2，是一种什么体验",
+      "date": "2026-08-27",
+      "category": "通信",
+      "tech": "ROS 2 Humble / UDP",
+      "listCategory": "通信",
+      "description": "局域网内 ping 稳定 100 ms，把 ROS 2 的可靠吞吐压到 1 Hz。iperf、信道扫描、MTU、缓冲膨胀，一路查下来的记录与最后没解决的那部分。",
+      "ogDescription": "局域网 100 ms 的 ping 不正常。我把这笔账算清楚了——大部分。",
+      "standfirst": "局域网里 100 ms 的 ping 是不正常的。我用 iperf、信道扫描、一根网线和一整晚的耐心， 把这笔账算清楚了——大部分。",
+      "summary": "局域网里 100 ms 的 ping 不正常。我用 iperf、信道扫描和一根网线，把这笔账算清楚了——大部分。",
+      "keywords": "wifi ros2 ros 2 延迟 ping iperf 吞吐 省电模式 modem sleep dds 通信",
+      "stack": "Ubuntu 22.04 · ROS 2 Humble · DDS eProsima",
+      "readtime": "约 10 分钟",
+      "words": "2,410",
+      "dateText": "2026.08.27",
+      "tags": [
+        "ros2",
+        "comm"
+      ]
+    },
+    {
+      "slug": "servo-jitter",
+      "title": "舵机抖动的三种可能",
+      "date": "2026-08-05",
+      "category": "硬件",
+      "tech": "PWM / 云台",
+      "listCategory": "硬件",
+      "description": "同一个角度指令，舵机却在原地发抖。按电源、信号、机械的顺序排查，最后一种最意外：抖的不是舵机，是支架。",
+      "ogDescription": "抖的不是舵机，是支架。以及一个 0.5 度的死区能省掉多少麻烦。",
+      "standfirst": "发给它的是同一个角度，一遍又一遍，它却在原地发抖。 电源、信号、机械——我按这个顺序一个个排除，最后一种最意外。",
+      "summary": "同一个角度指令，舵机却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，第三种最意外。",
+      "keywords": "舵机 抖动 pwm 云台 支架 共振 死区 刚度 硬件 jointstate",
+      "stack": "云台二自由度 · 数字舵机 ×2",
+      "readtime": "约 9 分钟",
+      "words": "2,090",
+      "dateText": "2026.08.05",
+      "tags": [
+        "hardware",
+        "debug"
+      ]
+    },
+    {
+      "slug": "workbench",
+      "title": "我的工作台：一张桌上的十四件东西",
+      "date": "2026-07-19",
+      "category": "工作台",
+      "tech": "",
+      "listCategory": "工作台",
+      "description": "不谈性能参数，只谈趁手。一张 120×60 的桌子上常驻的十四件工具，哪些用了六年没换，哪些半年换了三回。",
+      "ogDescription": "不谈性能参数，只谈趁手。",
+      "standfirst": "不谈性能参数，只谈趁手。有些工具用了六年还是原样，有些半年就换了三回—— 这两类东西的区别，比价格重要得多。",
+      "summary": "不谈性能参数，只谈趁手。有些工具用了六年还是原样，有些半年就换了三回。",
+      "keywords": "工作台 工具 烙铁 示波器 电源 3d打印 桌面 万用表 杜邦线",
+      "stack": "桌子 120 × 60 cm",
+      "readtime": "约 8 分钟",
+      "words": "1,780",
+      "dateText": "2026.07.19",
+      "tags": [
+        "essay"
+      ]
+    },
+    {
+      "slug": "handwriting-notes",
+      "title": "为什么我还在手写笔记",
+      "date": "2026-06-28",
+      "category": "随笔",
+      "tech": "",
+      "listCategory": "随笔",
+      "description": "电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关，和速度有关：手跟不上脑子，于是被迫提炼。",
+      "ogDescription": "原因和记忆力无关，和速度有关。",
+      "standfirst": "电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关——和速度有关。",
+      "summary": "电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关，和速度有关。",
+      "keywords": "手写笔记 纸 笔 方格本 记录 思考 随笔 notion obsidian",
+      "stack": "1,320 字",
+      "readtime": "约 6 分钟",
+      "words": "1,320",
+      "dateText": "2026.06.28",
+      "tags": [
+        "essay"
+      ]
+    },
+    {
+      "slug": "boot-log",
+      "title": "读懂 ESP32 的启动日志",
+      "date": "2026-09-20",
+      "category": "固件",
+      "tech": "ESP32 / ESP-IDF",
+      "listCategory": "固件",
+      "description": "开机那三十行不是噪音。逐段拆解 bootloader 的输出：复位原因、内存水位、Flash 分区账本，以及它其实抄下了你全部的编译选项。",
+      "ogDescription": "那三十行开机日志里，藏着芯片型号、内存余量和 Flash 分区。",
+      "standfirst": "那三十行开机就滚过去的文字，其实把芯片型号、内存余量、Flash 分区和编译参数全交代了。只是我们习惯把它当噪音。",
+      "summary": "复位原因、最大连续内存块、分区地址账本——开机日志里最该看的四个地方。",
+      "keywords": "esp32 启动日志 bootloader 分区表 partitions rst 复位 flash 内存 largest free block 固件 串口",
+      "stack": "ESP32-WROOM-32E · ESP-IDF v5.5.4 · Arduino 3.3.10",
+      "cover": "boot-log.svg",
+      "tags": [
+        "esp32",
+        "firmware",
+        "debug"
+      ]
+    },
+    {
+      "slug": "qos-tf-static",
+      "title": "内容对了，为什么没送到",
+      "date": "2026-08-30",
+      "category": "通信",
+      "tech": "ROS 2 / QoS",
+      "listCategory": "通信",
+      "description": "话题里明明躺着那条变换，RViz 却说 frame 不存在。问题不在内容，在 QoS 策略——一个几乎不报错的坑。",
+      "ogDescription": "话题里有数据，可 RViz 就是收不到。",
+      "standfirst": "RViz 里的点云画得好好的，我把发布它的终端关掉了，画面还在。顺着这条线查下去，撞上了 ROS 2 里最容易忽略的一块。",
+      "summary": "transient_local 遇上 volatile：消息就躺在话题里，订阅者却主动拒绝接收。",
+      "keywords": "ros2 qos durability transient_local volatile tf_static rviz 订阅 发布 通信 dds tf",
+      "stack": "ROS 2 · rviz2 · tf2_ros",
+      "tags": [
+        "ros2",
+        "comm"
+      ]
+    },
+    {
+      "slug": "no-systemd-autostart",
+      "title": "在没有 systemd 的环境里让服务活下来",
+      "date": "2026-08-15",
+      "category": "环境",
+      "tech": "PRoot / WSL2",
+      "listCategory": "环境",
+      "description": "systemctl 在 PRoot 里用不了，WSL2 的 DISPLAY 又总是填错。这两个坑其实是同一个问题：先搞清楚这个环境里到底有什么。",
+      "ogDescription": "没有 init 系统的时候，「开机自启」该挂在哪儿？",
+      "standfirst": "敲过无数次的 systemctl enable 第一次失败，是在一台跑在 Android 手机里的 Ubuntu 上。既然没有 init 系统，就不会有人来读你的开机自启清单。",
+      "summary": "把启动挂到登录 shell 上，以及 WSL2 里 DISPLAY 为什么会填成一个公网 DNS 地址。",
+      "keywords": "proot systemd systemctl 自启 bashrc sshd wsl2 display x11 主机 ip 网关 环境",
+      "stack": "PRoot (Android) · WSL2",
+      "tags": [
+        "env"
+      ]
+    },
+    {
+      "slug": "micro-ros-agent",
+      "title": "micro_ros_agent 装不上的三个原因",
+      "date": "2026-08-13",
+      "category": "通信",
+      "tech": "micro-ROS / ROS 2",
+      "listCategory": "通信",
+      "description": "ros2 run 报 Package not found，全盘搜索也是空的。真正花时间的不是编译，是三个不给你任何提示的前置坑。",
+      "ogDescription": "报 Package not found，但问题不在包管理。",
+      "standfirst": "在一个刚装好的 ROS 2 环境里敲下第一句命令，得到的是 Package not found。接下来两个小时，真正浪费时间的不是编译。",
+      "summary": "没有 apt 包、shell 没 source、GitHub 通道被拦——三件事在终端里长得一模一样。",
+      "keywords": "micro-ros agent 编译 colcon rosdep 安装 ubuntu udp 端口 源码 包找不到 ros2",
+      "stack": "ROS 2 · Ubuntu aarch64 · colcon",
+      "tags": [
+        "ros2",
+        "micro-ros",
+        "env"
+      ]
+    },
+    {
+      "slug": "rotary-encoder-ui",
+      "title": "两个输入，一个状态机",
+      "date": "2026-05-28",
+      "category": "设计",
+      "tech": "旋转编码器 / 状态机",
+      "listCategory": "设计",
+      "description": "一个旋转编码器只有转和按两个动作，却要控制一台有多个模式的设备。把交互设计写下来，才发现有些决定我说不出为什么。",
+      "ogDescription": "用三个动作控制一台设备，以及为什么切模式必须用长按。",
+      "standfirst": "这台设备的全部输入只有一个旋转编码器：能左转、能右转、能按下去。而它要控制一个屏幕、一个摄像头和一张 SD 卡里的图片。",
+      "summary": "连续量用于调整，离散量用于切换——以及验收标准为什么值得写两条。",
+      "keywords": "旋转编码器 交互设计 状态机 长按 短按 模式切换 验收标准 嵌入式 ui 设计",
+      "stack": "旋转编码器 · SPI 屏幕 · 摄像头",
+      "tags": [
+        "design",
+        "hardware"
+      ]
+    },
+    {
+      "slug": "local-llm-timing",
+      "title": "那 7 秒里，6 秒在加载模型",
+      "date": "2026-08-31",
+      "category": "工具链",
+      "tech": "Ollama / aarch64",
+      "listCategory": "工具链",
+      "description": "一台没有独显的机器上跑语言模型：让它监听所有网卡、确认它到底在用什么算，以及把 7.13 秒的响应时间拆成三笔账。",
+      "ogDescription": "第一次请求的 7 秒里，6 秒在加载模型，不是在算。",
+      "standfirst": "一台没有独立显卡的机器，我想在上面跑一个语言模型，并且让局域网里的其他设备也能调用它。麻烦的不是装，是「跑起来」之后。",
+      "summary": "让它对外说话、确认它在用什么算，以及把 7.13 秒拆成加载、读题、作答三笔账。",
+      "keywords": "ollama 本地 大模型 llm cpu 推理 tokens 加载 duration nohup 端口 11434 内存 vram 工具链",
+      "stack": "aarch64 · 可用内存 6.3 GiB · llama3.2",
+      "tags": [
+        "llm",
+        "localai"
+      ]
+    },
+    {
+      "slug": "duplicate-handler",
+      "title": "我改了那个函数，但跑的不是它",
+      "date": "2025-09-22",
+      "category": "调试笔记",
+      "tech": "数据链路 / 前端",
+      "listCategory": "调试",
+      "description": "同一台设备的数据在两个页面上表现相反。三个对照实验把嫌疑逼进一个很窄的角落，而真正的麻烦是一个函数名有两份实现。",
+      "ogDescription": "改代码是成功的，唯一不对的是——你改的不是会运行的那一份。",
+      "standfirst": "同一台真实设备、同一路数据，实况页面显示正常，调试窗口一片空白。三次对照实验之后，问题被逼进了一个很窄的角落。",
+      "summary": "用三组对照排除两个方向，然后撞上有两个实现的 onAtmosphericDataReceived。",
+      "keywords": "调试 排查 控制变量 同名函数 前端 数据链路 回调 转发 端口 mqtt 日志",
+      "stack": "Vue · 数据链路调试",
+      "tags": [
+        "debug",
+        "frontend"
+      ]
+    },
+    {
+      "slug": "suspicious-fit",
+      "title": "一次好得可疑的拟合",
+      "date": "2025-09-08",
+      "category": "数据",
+      "tech": "最小二乘 / GPS",
+      "listCategory": "数据",
+      "description": "用十二个 GPS 点拟合车辆转弯半径，最大偏差只有 0.6 毫米——比设备本身的精度高出一千倍。这不是好消息。",
+      "ogDescription": "拟合结果好得不合理的时候，该怀疑的不是算法。",
+      "standfirst": "我需要一个数字：车辆的转弯半径。而手上只有一条 GPS 轨迹。代码跑通了，但看着那组输出，我停了下来——它好得不像是真的。",
+      "summary": "十二个点、残差 0.6 毫米，以及为什么「拟合得太好」是个危险信号。",
+      "keywords": "拟合 圆 最小二乘 circle_fit 转弯半径 gps 经纬度 投影 残差 精度 数据",
+      "stack": "Python · numpy · circle_fit",
+      "tags": [
+        "data",
+        "python"
+      ]
+    },
+    {
+      "slug": "local-27b-on-8gb",
+      "title": "8 GB 显存里塞一个 27B 模型",
+      "date": "2026-09-19",
+      "category": "工具链",
+      "tech": "llama.cpp / 本地推理",
+      "listCategory": "工具链",
+      "description": "加载失败、参数和程序打架、上下文越长越慢——这三个问题都能在一份 llama-server 日志里读到答案。",
+      "ogDescription": "生成速度从 20 tokens/s 掉到 8，衰减的六成不是故障。",
+      "standfirst": "8 GB 显存想跑 27B 模型，按参数量算不该够。除非量化到三值——那 27B 只需要 5.3 GB，数字上刚好塞得进去。",
+      "summary": "GGUF 不等于兼容性保证、手动 -ngl 会关掉自动拟合，以及上下文长度对生成速度的真实影响。",
+      "keywords": "本地 大模型 llama.cpp gguf 量化 显存 ngl 上下文 kv cache tokens 推理 性能 工具链",
+      "stack": "Ryzen 7 7735H · RTX 4060 8GB · llama.cpp",
+      "tags": [
+        "llm",
+        "localai"
+      ]
+    },
+    {
+      "slug": "phone-as-host",
+      "title": "把手机变成 ROS 2 上位机",
+      "date": "2026-08-13",
+      "category": "环境",
+      "tech": "PRoot / ROS 2 / aarch64",
+      "listCategory": "环境",
+      "description": "用一部旧手机当 ROS 2 上位机：neofetch 里三条线索暴露了它的真实身份。Agent 能跑、话题能收发，但边界也很清楚。",
+      "ogDescription": "一部手机当然能当上位机——前提是知道自己在哪个边界之内。",
+      "standfirst": "我不想每次调试都开电脑。车在地板上、雷达在桌角，这套东西要动起来传统上还需要一台笔记本当上位机——而如果上位机能塞进口袋呢？",
+      "summary": "neofetch 的三条线索、三个坑，以及实测出来的 0.5 Hz。",
+      "keywords": "手机 上位机 android ubuntu proot termux ros2 micro-ros agent ssh 便携 aarch64 环境",
+      "stack": "Android · PRoot Ubuntu · ROS 2 · micro-ROS Agent",
+      "tags": [
+        "ros2",
+        "env",
+        "android"
+      ]
+    }
+  ],
+  "tagLabels": {
+    "esp32": "ESP32",
+    "firmware": "固件",
+    "debug": "调试",
+    "ros2": "ROS 2",
+    "micro-ros": "micro-ROS",
+    "env": "环境",
+    "comm": "通信",
+    "llm": "大模型",
+    "localai": "本地推理",
+    "data": "数据",
+    "python": "Python",
+    "hardware": "硬件",
+    "design": "设计",
+    "frontend": "前端",
+    "essay": "随笔",
+    "android": "Android"
+  }
+}

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>那 7 秒里，6 秒在加载模型 — 余量 MARGIN</title>
+<meta name="description" content="一台没有独显的机器上跑语言模型：让它监听所有网卡、确认它到底在用什么算，以及把 7.13 秒的响应时间拆成三笔账。">
+<link rel="canonical" href="https://margin.pages.dev/posts/local-llm-timing.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="那 7 秒里，6 秒在加载模型 — 余量 MARGIN">
+<meta property="og:description" content="第一次请求的 7 秒里，6 秒在加载模型，不是在算。">
+<meta property="og:url" content="https://margin.pages.dev/posts/local-llm-timing.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">工具链 · No.12 · Ollama / aarch64</div>
+      <h1>那 7 秒里，6 秒在加载模型</h1>
+      <p class="standfirst">一台没有独立显卡的机器，我想在上面跑一个语言模型，并且让局域网里的其他设备也能调用它。麻烦的不是装，是「跑起来」之后。</p>
+      <div class="byline">
+        <span><time datetime="2026-08-31">2026.08.31</time></span>
+        <span class="dot"></span><span data-readtime>约 8 分钟</span>
+        <span class="dot"></span><span>2,935 字</span>
+        <span class="dot"></span><span>aarch64 · 可用内存 6.3 GiB · llama3.2</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/llm.html">大模型</a>
+        <a class="tag" href="/tags/localai.html">本地推理</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">一台没有独立显卡的机器，我想在上面跑一个语言模型，并且让局域网里的其他设备也能调用它。</p>
+
+        <p>装的部分没什么好说的，一条命令就结束了。麻烦的地方在"跑起来"之后：
+          <strong>它默认只肯跟自己说话</strong>，而我看不出它到底是用什么在算、为什么第一次响应要等那么久。</p>
+
+        <p>这篇记的是那之后的四件事：让它对外说话、确认它在跑、看懂它在用什么算、以及把那 7 秒钟拆开。</p>
+
+        <h2><span class="h2num">01</span>第一件事：让它监听所有网卡</h2>
+
+        <p>默认情况下，服务只绑定在 <code>127.0.0.1</code>——也就是"只有本机能连"。
+          这台机器上跑得好好的，我在笔记本上 <code>curl</code> 它就是连不上。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>后台启动并监听所有网卡</span></div>
+    <pre>nohup env OLLAMA_HOST=0.0.0.0:11434 ollama serve &gt;&gt; /var/log/ollama.log 2&gt;&amp;1 &amp;</pre>
+        </div>
+
+        <p>这一行里有四个东西，缺一个都会出问题：</p>
+
+        <ul>
+          <li><code>nohup</code> —— 让进程脱离终端。不加它，你断开 SSH 的那一刻服务就没了。</li>
+          <li><code>env OLLAMA_HOST=0.0.0.0:11434</code> —— 把监听地址改成<strong>所有网卡</strong>。
+            <code>0.0.0.0</code> 不是某个具体地址，它的意思是"接受来自任何网卡的连接"。
+            这是它的默认值 <code>127.0.0.1</code> 的反面。</li>
+          <li><code>&gt;&gt; /var/log/ollama.log 2&gt;&amp;1</code> —— 标准输出和错误都追加到日志文件。
+            <code>2&gt;&amp;1</code> 是必须的，否则错误信息会被丢掉——
+            而排查问题时，你要找的恰恰是错误信息。</li>
+          <li>末尾的 <code>&amp;</code> —— 放后台，让终端立刻还给你。</li>
+        </ul>
+
+        <h2><span class="h2num">02</span>第二件事：用三个动作确认它活着</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>确认</span></div>
+    <pre><span class="c"># 1. 进程在不在</span>
+    ps aux | grep ollama
+
+    <span class="c"># 2. 日志里最后几行说了什么</span>
+    tail -n 5 /var/log/ollama.log
+
+    <span class="c"># 3. 接口通不通（注意用局域网地址，不是 localhost）</span>
+    curl http://192.168.1.3:11434/api/generate \
+      -d '{"model":"llama3.2","prompt":"Hi","stream":false}'</pre>
+        </div>
+
+        <p>第三个动作有个容易做错的地方：<strong>测试要用局域网 IP，不能用 <code>localhost</code></strong>。
+          在 <code>localhost</code> 上测通，只证明"它自己认识自己"，
+          完全不能说明外部能不能连上。</p>
+
+        <h2><span class="h2num">03</span>第三件事：它在用什么算</h2>
+
+        <p>启动日志把硬件情况交代得很清楚：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>/var/log/ollama.log</span></div>
+    <pre>level=INFO msg="discovering available GPUs..."
+    level=INFO msg="model list cache hydration complete" models=1 failures=0 elapsed=10.330729ms
+    level=INFO msg="inference compute" id=cpu library=cpu name=cpu total="10.9 GiB" available="6.3 GiB"
+    level=INFO msg="vram-based default context" total_vram="0 B" default_num_ctx=4096</pre>
+        </div>
+
+        <p>逐行读：</p>
+
+        <ul>
+          <li><strong>第一行说它在找 GPU。</strong>后面没有出现任何 GPU 的名字，
+            而 <code>inference compute</code> 那行里 <code>id=cpu</code>、<code>library=cpu</code>——
+            意思很明确：<em>这台机器上没有它能用的加速设备，全部落到 CPU 上算</em>。</li>
+          <li><strong><code>total="10.9 GiB" available="6.3 GiB"</code></strong> 是内存的账。
+            这是最关键的一行：模型必须装进 <strong>6.3 GiB</strong> 这个可用额度里，
+            而不是标称的 10.9。已经跑着别的服务时，这个数会更小。</li>
+          <li><strong><code>total_vram="0 B"</code> + <code>default_num_ctx=4096</code></strong> 说明因为显存为零，
+            上下文长度被按 CPU 的默认值设成了 4096 个 token。想让它记住更长的对话，得手动调——
+            代价是内存占用同步上升。</li>
+        </ul>
+
+        <h2><span class="h2num">04</span>第四件事：那 7 秒花在哪了</h2>
+
+        <p>上面那条 <code>curl</code> 第一次跑完，返回的 JSON 里带着一组 <code>duration</code> 字段。
+          它们都是以<strong>纳秒</strong>为单位的整数，我把它换算成秒排了一遍：</p>
+
+        <table>
+          <thead>
+            <tr><th>字段</th><th>纳秒</th><th>秒</th><th>占比</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>load_duration</code></td><td>6 089 822 341</td><td>6.09 s</td><td>85.3%</td></tr>
+            <tr><td><code>prompt_eval_duration</code></td><td>522 756 000</td><td>0.52 s</td><td>7.3%</td></tr>
+            <tr><td><code>eval_duration</code></td><td>510 453 000</td><td>0.51 s</td><td>7.2%</td></tr>
+            <tr><td><code>total_duration</code></td><td>7 134 792 185</td><td>7.13 s</td><td>100%</td></tr>
+          </tbody>
+        </table>
+
+        <p><mark>7.13 秒里，6.09 秒花在"把模型加载进内存"上，真正算的部分只占了 1 秒。</mark></p>
+
+        <p>而且这 1 秒还能再拆：<code>prompt_eval</code> 是处理我那句 "Hi" 的时间（0.52 秒），
+          <code>eval</code> 是生成回答的时间（0.51 秒）。生成的量是 <code>eval_count: 8</code>——
+          八个 token。</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>算一下出词速度</span></div>
+    <pre>8 token ÷ 0.51 s ≈ 15.7 token/s</pre>
+        </div>
+
+        <p>15.7 token/秒，纯 CPU。这个速度用于生成短句是可以接受的——
+          它大概相当于人快速阅读的速度，等一两秒出半句话，感觉不算煎熬。
+          但用来写长文就会很难受：一千个 token 要等一分多钟。</p>
+
+        <p>更重要的是那个 6.09 秒。它<strong>不代表这台机器算得慢</strong>，
+          它代表"模型还没进内存"。所以同一台机器上第二次问同样的问题，
+          只要模型还在内存里，响应会明显快得多——因为最大的一块开销被跳过了。</p>
+
+        <p>这也是为什么"用同一句话前后测两次"这件事很重要：
+          第一次的数字看着吓人，但它测的是加载，不是推理。</p>
+
+        <h2><span class="h2num">05</span>停掉它</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>停止与确认</span></div>
+    <pre>pkill -f "ollama serve"
+    ps aux | grep "ollama serve" | grep -v grep</pre>
+        </div>
+
+        <p><code>-f</code> 让 pkill 匹配完整的命令行而不只是进程名，
+          这样能准确命中带参数启动的那个进程。
+          第二行的 <code>grep -v grep</code> 是把它自己的搜索进程过滤掉，
+          否则你永远会看到"似乎还有一个在跑"。</p>
+
+        <blockquote>
+          <p>这台机器上跑着模型、Agent、还有别的服务，内存的 <code>available</code> 是共享的。
+            所以"能不能跑某个模型"这个问题，答案不取决于模型有多大，
+            而取决于<em>此刻还剩多少可用内存</em>——它每天都不一样。</p>
+        </blockquote>
+
+        <h2><span class="h2num">06</span>留下四个可以带走的东西</h2>
+
+        <ol>
+          <li><strong>本地服务要对外，先看它绑在哪。</strong>
+            <code>127.0.0.1</code> 和 <code>0.0.0.0</code> 只差几个字符，一个只能自己用，一个全网可达。</li>
+          <li><strong>测连通性要用真实 IP，不要用 localhost。</strong>
+            这两个测试回答的是不同的问题。</li>
+          <li><strong><code>available</code> 才是能用的内存，不是 <code>total</code>。</strong>
+            决定模型能不能加载的是前者，而且它随时在变。</li>
+          <li><strong>看耗时不要只看总数，要拆开。</strong>
+            加载、处理输入、生成输出是三笔独立的账。
+            混在一起看，你会误以为"这台机器算得慢"，而实际上它只是"还没醒"。</li>
+        </ol>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自 2026 年 8 月 31 日的便签记录。日志与 JSON 返回值为当时的真实输出，
+            机器为无独立显卡的 aarch64 设备（可用内存 6.3 GiB）。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>新增第 04 节。原始便签里只是把启动命令和几条验证命令罗列在一起，
+            没有解释那些 duration 字段——而它们才是"为什么第一次这么慢"的答案。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么不干脆用 <code>&gt; /dev/null</code>。</b>
+            把日志丢掉，服务照样能跑，但你就失去了唯一的观察窗口。
+            上面那四行判断"用什么在算"的信息，全部来自这个文件。
+          </p>
+          <p class="marginnote">
+            <b>纳秒这个单位容易骗人。</b>
+            7134792185 一眼看不出是多少秒。遇到这种长整数，
+            先做一次除法把它变成人能读的量级，再谈快慢。
+          </p>
+          <p class="marginnote">
+            <b>prompt_eval 和 eval 的区别。</b>
+            前者是"读完你说的话"要多久，后者是"写回答"要多久。
+            输入越长，第一部分越贵；输出越长，第二部分越贵。
+            两者优化的方向完全不同。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/qos-tf-static.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">内容对了，为什么没送到</span>
+      </a>
+      <a href="/posts/serial-log-day.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">串口日志里的一天</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/local-27b-on-8gb.html">
+          <span class="relitem__meta">09.19 · 工具链</span>
+          <span class="relitem__title">8 GB 显存里塞一个 27B 模型</span>
+          <span class="relitem__sum">GGUF 不等于兼容性保证、手动 -ngl 会关掉自动拟合，以及上下文长度对生成速度的真实影响。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="local-llm-timing" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

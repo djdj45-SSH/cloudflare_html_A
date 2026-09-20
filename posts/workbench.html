@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的工作台：一张桌上的十四件东西 — 余量 MARGIN</title>
+<meta name="description" content="不谈性能参数，只谈趁手。一张 120×60 的桌子上常驻的十四件工具，哪些用了六年没换，哪些半年换了三回。">
+<link rel="canonical" href="https://margin.pages.dev/posts/workbench.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="我的工作台：一张桌上的十四件东西 — 余量 MARGIN">
+<meta property="og:description" content="不谈性能参数，只谈趁手。">
+<meta property="og:url" content="https://margin.pages.dev/posts/workbench.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">工作台 · No.05</div>
+      <h1>我的工作台：一张桌上的十四件东西</h1>
+      <p class="standfirst">不谈性能参数，只谈趁手。有些工具用了六年还是原样，有些半年就换了三回—— 这两类东西的区别，比价格重要得多。</p>
+      <div class="byline">
+        <span><time datetime="2026-07-19">2026.07.19</time></span>
+        <span class="dot"></span><span data-readtime>约 8 分钟</span>
+        <span class="dot"></span><span>1,780 字</span>
+        <span class="dot"></span><span>桌子 120 × 60 cm</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/essay.html">随笔</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">桌面是 120 × 60 的，不算大。这个尺寸有个好处：伸手能够到所有东西，
+          所以你会非常清楚什么是真的常用，什么只是摆着好看。半年清理一次，
+          每次清完留在桌上的，大概就是这十四件。</p>
+
+        <p>我不打算写测评，参数网上都有。只写它们在我的日常工作里到底干了什么，
+          以及——更重要的——哪几件我后悔买晚了。</p>
+
+        <h2><span class="h2num">01</span>电源与测量</h2>
+
+        <p><strong>可调直流电源（30 V / 5 A）。</strong> 这是全桌最贵的东西，也是我最后悔买晚的。
+          在这之前我用一堆 USB 充电器和电池供电，于是所有"莫名其妙的复位"都被我归因为软件。
+          有了它之后，我能直接看到电流曲线——电机启动时拉多少、什么时候拉、持续多久，
+          一眼就知道该加多大的电容。上一篇文章里那个 0.42 V 的跌落，就是它帮我定量复现的。</p>
+
+        <p><strong>四位半万用表。</strong> 用得最多的是蜂鸣档和电压档。电流档我一年用不到十次，
+          因为电流我更信任电源上的读数。买的时候别纠结精度，纠结表笔——好表笔比好表更影响体验。</p>
+
+        <p><strong>手持示波器（100 MHz）。</strong> 不是每天都用，但每次用都是关键场合。
+          我买它是为了看 PWM 波形，后来发现它最大的价值是"让你停止猜测"：
+          信号到底有没有、什么时候有、多宽，看一眼就结束了争论。</p>
+
+        <figure class="figure">
+          <svg viewBox="0 0 800 260" role="img" aria-label="桌面布局俯视示意">
+            <rect x="40" y="30" width="720" height="200" fill="none" stroke-width="1.6" style="stroke:var(--text-3)"/>
+            <g stroke-opacity=".25" stroke-width="1" stroke-dasharray="3 4" style="stroke:var(--text-3)">
+              <path d="M40 130 H760"/>
+              <path d="M400 30 V230"/>
+            </g>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".8" style="fill:var(--text-3)">
+              <rect x="70" y="55" width="120" height="52" fill="none" style="stroke:var(--text-3)"/>
+              <text x="130" y="86" text-anchor="middle">电源</text>
+              <rect x="210" y="55" width="90" height="52" fill="none" style="stroke:var(--text-3)"/>
+              <text x="255" y="86" text-anchor="middle">示波器</text>
+              <rect x="320" y="55" width="70" height="52" fill="none" style="stroke:var(--text-3)"/>
+              <text x="355" y="86" text-anchor="middle">万用表</text>
+              <rect x="70" y="152" width="150" height="56" fill="none" style="stroke:var(--text-3)"/>
+              <text x="145" y="184" text-anchor="middle">面包板 / 待测板</text>
+              <rect x="240" y="152" width="90" height="56" fill="none" style="stroke:var(--text-3)"/>
+              <text x="285" y="184" text-anchor="middle">烙铁</text>
+              <rect x="430" y="70" width="290" height="90" fill="none" stroke-opacity=".5" style="stroke:var(--text-3)"/>
+              <text x="575" y="118" text-anchor="middle" fill-opacity=".55" style="fill:var(--text-3)">显示器 / 键盘</text>
+              <rect x="450" y="176" width="120" height="32" fill="none" style="stroke:var(--text-3)"/>
+              <text x="510" y="197" text-anchor="middle">笔记本</text>
+            </g>
+            <g font-family="ui-monospace,Consolas,monospace" font-size="10" style="fill:var(--amber)">
+              <text x="640" y="60">常动区</text>
+              <text x="640" y="228">固定区</text>
+            </g>
+          </svg>
+          <figcaption><b>图 01</b> — 桌面分区原则：右手边（常动区）只放今天在用的东西，其余全部收进抽屉。</figcaption>
+        </figure>
+
+        <h2><span class="h2num">02</span>焊接与连接</h2>
+
+        <p><strong>恒温烙铁（T12 头）。</strong> 从 30 块的外热式换过来，是这几年来性价比最高的一次升级。
+          真正的差别不是温度准，是<em>回温快</em>——焊一块大面积接地铜皮时，便宜烙铁会让你怀疑人生。</p>
+
+        <p><strong>细锡丝（0.6 mm，含松香）。</strong> 0.8 mm 用在 0603 上太多了，0.4 mm 又太慢。
+          0.6 是个中间值，我基本只买这个规格。</p>
+
+        <p><strong>杜邦线一盒 + 硅胶线若干。</strong> 杜邦线是消耗品，我每年扔掉一把接触不良的。
+          这里唯一的经验：<mark>看起来还能用的杜邦线，往往是排查三天之后的真凶</mark>。
+          我现在遇到间歇性问题，第一件事是把所有杜邦线换掉。</p>
+
+        <p><strong>压线钳和冷压端子。</strong> 真正需要长期可靠的连接时，别用杜邦线。
+          这一套我用得不多，但每次用都庆幸买了。</p>
+
+        <h2><span class="h2num">03</span>固定与结构</h2>
+
+        <p><strong>3D 打印机（入门级 FDM）。</strong> 买之前我以为会打很多外壳，
+          实际上打得最多的是<em>支架</em>和<em>治具</em>。上一篇文章里那个抖动的云台，
+          最后是用 3 mm 铝板解决的，但在此之前的三个验证版本，全是打印件——
+          它让我在两天里试了三种结构，而不是等一周的机加工。</p>
+
+        <p><strong>一套内六角螺丝（M2 / M2.5 / M3）。</strong> 分格盒装的，几十块钱。
+          这是全桌最不起眼但最救命的东西。缺一颗螺丝会让整个下午停摆。</p>
+
+        <p><strong>热熔胶枪。</strong> 我知道这不专业。但在验证阶段，能把东西固定在某个位置，
+          比固定得漂亮重要得多。</p>
+
+        <h2><span class="h2num">04</span>纸、光、和一杯水</h2>
+
+        <p><strong>台灯（可调色温、无频闪）。</strong> 焊了一晚上之后眼睛累不累，一半取决于它。
+          别在这上面省钱。</p>
+
+        <p><strong>A4 打印纸一包。</strong> 这个我在<a href="/posts/serial-log-day.html">上一篇</a>里写过：
+          把日志打印出来铺在地板上，我用它找到了三个模块同时报错的规律。
+          屏幕只能一屏一屏地看，纸能让你一次看到全貌。</p>
+
+        <p><strong>方格笔记本 + 一支 0.38 的笔。</strong> 手写的理由我<a href="/posts/handwriting-notes.html">另外写了一篇</a>，
+          这里只说一点：它就在手边，不需要开机。</p>
+
+        <p><strong>带盖的水杯。</strong> 最后一件，也是我认为最容易被忽略的一件。
+          不带盖的杯子放在桌上的第三年，我打翻了一杯水在电源上。带盖之后，这件事再没发生过。</p>
+
+        <h2><span class="h2num">05</span>半年换了三回的那些</h2>
+
+        <p>桌上还有一类东西，我一直在换：USB 集线器、无线鼠标、各种转接头、蓝牙音箱。
+          它们的共同点是：<strong>我并不真的依赖它们的可靠性</strong>。
+          坏了就换，不影响主线工作。</p>
+
+        <p>而真正常驻的十四件有个共同特征：<em>它们坏掉的那天，我的工作会直接停摆</em>。
+          判断一件工具值不值得买好的，我觉得就看这一条。</p>
+
+        <dl class="revision">
+          <dt>2026.09.10 更新</dt>
+          <dd>杜邦线那一段补了一句：间歇性故障先换线。过去三个月我遇到两次，两次都是线。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>关于烙铁。</b> T12 头是白菜白光那一类，头子几块钱一个，烧坏了不心疼。
+            真正的门槛是回温速度，不是标称功率。
+          </p>
+          <p class="marginnote">
+            <b>120 × 60 是我试过 140 × 70 之后退回来的尺寸。</b>
+            桌子大了，东西就会摊开，摊开之后你就不知道什么是常用的了。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/handwriting-notes.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">为什么我还在手写笔记</span>
+      </a>
+      <a href="/posts/servo-jitter.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">舵机抖动的三种可能</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/handwriting-notes.html">
+          <span class="relitem__meta">06.28 · 随笔</span>
+          <span class="relitem__title">为什么我还在手写笔记</span>
+          <span class="relitem__sum">电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关，和速度有关。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="workbench" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

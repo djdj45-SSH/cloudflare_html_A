@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wi-Fi 上跑 ROS 2，是一种什么体验 — 余量 MARGIN</title>
+<meta name="description" content="局域网内 ping 稳定 100 ms，把 ROS 2 的可靠吞吐压到 1 Hz。iperf、信道扫描、MTU、缓冲膨胀，一路查下来的记录与最后没解决的那部分。">
+<link rel="canonical" href="https://margin.pages.dev/posts/wifi-ros2-latency.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Wi-Fi 上跑 ROS 2，是一种什么体验 — 余量 MARGIN">
+<meta property="og:description" content="局域网 100 ms 的 ping 不正常。我把这笔账算清楚了——大部分。">
+<meta property="og:url" content="https://margin.pages.dev/posts/wifi-ros2-latency.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">通信 · No.10 · ROS 2 Humble / UDP</div>
+      <h1>Wi-Fi 上跑 ROS 2，是一种什么体验</h1>
+      <p class="standfirst">局域网里 100 ms 的 ping 是不正常的。我用 iperf、信道扫描、一根网线和一整晚的耐心，把这笔账算清楚了——大部分。</p>
+      <div class="byline">
+        <span><time datetime="2026-08-27">2026.08.27</time></span>
+        <span class="dot"></span><span data-readtime>约 10 分钟</span>
+        <span class="dot"></span><span>2,410 字</span>
+        <span class="dot"></span><span>Ubuntu 22.04 · ROS 2 Humble · DDS eProsima</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/ros2.html">ROS 2</a>
+        <a class="tag" href="/tags/comm.html">通信</a></div>
+    </header>
+
+        <div class="wrap article-body">
+          <div class="prose">
+            <p class="first">先说结论，省得你读到最后才发现这篇没有奇迹：我把延迟从 100 ms 压到了 12 ms，
+              但没能压到 5 ms 以下。剩下的那部分，我至今不知道是什么，我把已知的全部写在这里。</p>
+
+            <p>事情起因于一个很具体的数字。我的 ESP32 通过 micro-ROS 往 Agent 发 <code>sensor_msgs/LaserScan</code>，
+              实测可靠吞吐只有约 1 Hz。雷达本身是 5 Hz 的，也就是说有 80% 的数据在路上丢了。
+              查吞吐之前，我先查了最底层的东西：</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>agent$ ping 192.168.1.11 · 100 包</span></div>
+    <pre>100 packets transmitted, 100 received, 0% packet loss
+    rtt min/avg/max/mdev = <span class="n">11.402</span>/<span class="n">98.713</span>/<span class="n">341.228</span>/<span class="n">62.019</span> ms</pre>
+            </div>
+
+            <p>零丢包，平均 98.7 ms，最大 341 ms，标准差 62 ms。这三个数字里，<strong>最要命的不是平均值，是标准差</strong>。
+              平均 100 ms 的链路勉强能干活；抖动 62 ms 的链路没法干活，因为你不敢设超时。</p>
+
+            <h2><span class="h2num">01</span>先分清：是 Wi-Fi 还是 ROS？</h2>
+
+            <p>这是第一个岔路口。我用一个很土但有效的办法：跑纯 ping 的同时跑 ROS 话题，看谁先崩。</p>
+
+            <ul>
+              <li>不跑 ROS，只 ping：平均 96 ms。</li>
+              <li>跑 ROS，同时 ping：平均 101 ms，话题频率 1 Hz。</li>
+              <li>只跑 ROS，用 <code>ros2 topic hz</code> 看：1.02 Hz。</li>
+            </ul>
+
+            <p>ping 基本没变化，说明 DDS 不是延迟的制造者，它只是<strong>受害者</strong>——
+              eProsima 默认的可靠传输在乱序和抖动面前会疯狂重传，重传又制造更多抖动，于是吞吐塌方。</p>
+
+            <blockquote>
+              <p>把问题从"A 和 B 之间有问题"缩小到"A 和 B 之间的链路本身有问题"，这一步省了我至少半天。
+                很多人一上来就调 DDS 的 QoS 参数，那是给漏水的管子缠胶带。</p>
+            </blockquote>
+
+            <h2><span class="h2num">02</span>iperf：吞吐其实不差</h2>
+
+            <p>延迟高，通常伴随吞吐低。但测出来不是这样：</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>iperf3 · TCP · 60 秒</span></div>
+    <pre>[ ID] Interval           Transfer     Bitrate         Retr
+    [  5] 0.00-60.00 sec     412 MBytes   <span class="n">57.6</span> Mbits/sec   <span class="n">189</span>   sender
+    [  5] 0.00-60.00 sec     411 MBytes   <span class="n">57.4</span> Mbits/sec          receiver</pre>
+            </div>
+
+            <p>57 Mbps，对 2.4 GHz 单流来说是很正常的成绩。189 次重传不算多。
+              <mark>吞吐正常、延迟爆炸，这种组合几乎总是指向缓冲（buffer）</mark>——
+              某个环节在排队，把延迟堆了起来。这就是所谓的 bufferbloat。</p>
+
+            <figure class="figure">
+              <svg viewBox="0 0 800 320" role="img" aria-label="延迟分布直方图">
+                <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".6" style="fill:var(--text-3)">
+                  <text x="40" y="34">延迟分布 · 500 次 ping</text>
+                </g>
+                <path d="M40 274 H764" stroke-width="1.4" fill="none" style="stroke:var(--text-3)"/>
+                <g fill-opacity=".85" style="fill:var(--amber)">
+                  <rect x="60"  y="196" width="34" height="78"/>
+                  <rect x="100" y="150" width="34" height="124"/>
+                  <rect x="140" y="88"  width="34" height="186"/>
+                  <rect x="180" y="60"  width="34" height="214"/>
+                  <rect x="220" y="104" width="34" height="170"/>
+                  <rect x="260" y="168" width="34" height="106"/>
+                  <rect x="300" y="210" width="34" height="64"/>
+                  <rect x="340" y="238" width="34" height="36"/>
+                  <rect x="380" y="252" width="34" height="22"/>
+                  <rect x="420" y="260" width="34" height="14"/>
+                </g>
+                <g fill-opacity=".45" style="fill:var(--text-3)">
+                  <rect x="460" y="264" width="34" height="10"/>
+                  <rect x="500" y="268" width="34" height="6"/>
+                  <rect x="540" y="270" width="34" height="4"/>
+                  <rect x="580" y="271" width="34" height="3"/>
+                  <rect x="620" y="272" width="34" height="2"/>
+                  <rect x="660" y="272" width="34" height="2"/>
+                  <rect x="700" y="273" width="34" height="1"/>
+                </g>
+                <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".55" style="fill:var(--text-3)">
+                  <text x="52"  y="292">10</text>
+                  <text x="132" y="292">50</text>
+                  <text x="212" y="292">90</text>
+                  <text x="292" y="292">130</text>
+                  <text x="372" y="292">170</text>
+                  <text x="452" y="292">210</text>
+                  <text x="532" y="292">250</text>
+                  <text x="612" y="292">290</text>
+                  <text x="692" y="292">330 ms</text>
+                </g>
+                <g stroke-width="1.4" fill="none" stroke-dasharray="5 4" style="stroke:var(--amber)">
+                  <path d="M150 60 V278"/>
+                </g>
+                <text x="156" y="52" font-family="ui-monospace,Consolas,monospace" font-size="11" style="fill:var(--amber)">众数 ≈ 65 ms</text>
+              </svg>
+              <figcaption><b>图 01</b> — 延迟不是均匀分布，主峰在 60–90 ms，另有一条拖到 330 ms 的长尾。长尾才是致命的部分。</figcaption>
+            </figure>
+
+            <h2><span class="h2num">03</span>三个嫌疑，逐个排除</h2>
+
+            <h3>嫌疑一：信道拥塞</h3>
+            <p>扫下来 2.4 GHz 一共 13 个网络，1、6、11 三个互不重叠的信道全被占，我所在的是 6，
+              上面有 5 个 AP。这确实不好，但换个场景验证一下就知道分量：凌晨三点复测，
+              平均延迟从 98 ms 降到 71 ms。有改善，但不是全部。</p>
+
+            <h3>嫌疑二：ESP32 的 Wi-Fi 省电</h3>
+            <p>默认的 <code>WIFI_PS_MIN_MODEM</code> 会让 RF 周期性休眠，代价就是延迟和抖动。
+              我改成 <code>WIFI_PS_NONE</code>：</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>firmware · 改后复测</span></div>
+    <pre><span class="c">// esp_wifi_set_ps(WIFI_PS_NONE);  // 关掉 modem sleep</span>
+    100 packets transmitted, 100 received
+    rtt min/avg/max/mdev = <span class="n">6.118</span>/<span class="n">43.206</span>/<span class="n">188.440</span>/<span class="n">31.507</span> ms</pre>
+            </div>
+
+            <p>平均从 98 ms 掉到 43 ms。<strong>这是单一改动里收益最大的一步</strong>，
+              代价是功耗——电池供电的项目要自己权衡。</p>
+
+            <h3>嫌疑三：Agent 侧的 USB 无线网卡</h3>
+            <p>我的 Agent 主机用的是一块 USB 无线网卡。把它拔掉，改接有线到同一个路由器：</p>
+
+            <div class="codeblock">
+              <div class="codeblock__bar"><span>改有线后 · ESP32 仍走 Wi-Fi</span></div>
+    <pre>rtt min/avg/max/mdev = <span class="n">4.902</span>/<span class="n">12.884</span>/<span class="n">51.306</span>/<span class="n">9.774</span> ms</pre>
+            </div>
+
+            <p>12.9 ms。到这里，1 Hz 的吞吐涨到了稳定 5 Hz——正好是雷达的物理频率，
+              也就是说链路不再是瓶颈了。</p>
+
+            <blockquote>
+              <p>原来 100 ms 里，有大约 55 ms 花在 ESP32 的 modem sleep 上，
+                有大约 30 ms 花在 Agent 那块 USB 网卡和它的驱动上，剩下的才是空气里本来该有的时间。</p>
+            </blockquote>
+
+            <h2><span class="h2num">04</span>剩下那部分，我没解决</h2>
+
+            <p>mdev 还有 9.8 ms，最大 51 ms。对大多数应用够用了，但对我要做的实时控制链路不够——
+              舵机闭环时，51 ms 的单次抖动意味着一次明显的过冲。</p>
+
+            <p>我试过但没用的几件事，一并记下来，省得你再走一遍：</p>
+
+            <ul>
+              <li>调 <code>RMW</code> 的 QoS：把 reliability 从 RELIABLE 改成 BEST_EFFORT，吞吐没再涨（本来就已经到物理频率上限了）。</li>
+              <li>改 MTU：从 1500 降到 1200，无变化。局域网不分片，这不是问题所在。</li>
+              <li>绑定信道带宽 20 MHz / 40 MHz：40 MHz 吞吐更好但抖动更差，最后选了 20 MHz。</li>
+              <li>把路由器换成另一个品牌：平均降到 9 ms，但 mdev 依然有 7 ms。说明<strong>空气里的时间不是零</strong>，
+                2.4 GHz 的 CSMA/CA 天生就有 contention 开销。</li>
+            </ul>
+
+            <p>所以这篇的结尾是开放的：我能把 Wi-Fi 上跑 ROS 2 做到"够用"，但做不到"确定"。
+              如果你的项目对延迟有硬要求，我的建议很朴素——<strong>能走线就走线</strong>。
+              我最后的控制链路改成了串口，把 Wi-Fi 留给那些不关心 50 ms 的数据。</p>
+
+            <p>工具本身没有错，错的是把它用在它不擅长的地方。这句话我大概每年都要重新学一次。</p>
+
+            <dl class="revision">
+              <dt>2026.09.02 补充</dt>
+              <dd>有读者问为什么不上 5 GHz。ESP32-WROOM 只支持 2.4 GHz，这个型号没得选；ESP32-C5 / S3 的部分型号才支持 5 GHz。</dd>
+              <dt>2026.08.28 修订</dt>
+              <dd>初稿把 43 ms 写成"最终值"，那是只改了省电模式的中间结果。加上有线对比后应为 12.9 ms，已更正。</dd>
+            </dl>
+          </div>
+
+          <aside class="notes">
+            <div class="notes__inner">
+              <div class="notes__toc"></div>
+              <p class="marginnote" style="margin-top:20px">
+                <b>mdev 比 avg 重要。</b> ping 的 mdev（标准差）决定你敢不敢设超时。
+                平均 20 ms 但 mdev 30 ms 的链路，比平均 50 ms 但 mdev 3 ms 的链路难用得多。
+              </p>
+              <p class="marginnote">
+                <b>iperf 要跑 60 秒以上。</b> 10 秒的采样会被 TCP 慢启动和周期性干扰带偏，
+                我第一次测出来 71 Mbps，第二次 57 Mbps，跑了 60 秒才稳定。
+              </p>
+              <p class="marginnote">
+                <b>ros2 topic hz</b> 是判断链路是否成为瓶颈最快的工具：
+                如果它显示的值正好等于传感器物理频率，说明链路已经不是限制了；如果明显低于，先别改代码，去查链路。
+              </p>
+            </div>
+          </aside>
+        </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/no-systemd-autostart.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">在没有 systemd 的环境里让服务活下来</span>
+      </a>
+      <a href="/posts/qos-tf-static.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">内容对了，为什么没送到</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/qos-tf-static.html">
+          <span class="relitem__meta">08.30 · 通信</span>
+          <span class="relitem__title">内容对了，为什么没送到</span>
+          <span class="relitem__sum">transient_local 遇上 volatile：消息就躺在话题里，订阅者却主动拒绝接收。</span>
+        </a>
+        <a class="relitem" href="/posts/micro-ros-agent.html">
+          <span class="relitem__meta">08.13 · 通信</span>
+          <span class="relitem__title">micro_ros_agent 装不上的三个原因</span>
+          <span class="relitem__sum">没有 apt 包、shell 没 source、GitHub 通道被拦——三件事在终端里长得一模一样。</span>
+        </a>
+        <a class="relitem" href="/posts/phone-as-host.html">
+          <span class="relitem__meta">08.13 · 环境</span>
+          <span class="relitem__title">把手机变成 ROS 2 上位机</span>
+          <span class="relitem__sum">neofetch 的三条线索、三个坑，以及实测出来的 0.5 Hz。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="wifi-ros2-latency" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>

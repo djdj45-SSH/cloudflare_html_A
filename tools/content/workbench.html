@@ -1,0 +1,126 @@
+<div class="wrap article-body">
+  <div class="prose">
+    <p class="first">桌面是 120 × 60 的，不算大。这个尺寸有个好处：伸手能够到所有东西，
+      所以你会非常清楚什么是真的常用，什么只是摆着好看。半年清理一次，
+      每次清完留在桌上的，大概就是这十四件。</p>
+
+    <p>我不打算写测评，参数网上都有。只写它们在我的日常工作里到底干了什么，
+      以及——更重要的——哪几件我后悔买晚了。</p>
+
+    <h2><span class="h2num">01</span>电源与测量</h2>
+
+    <p><strong>可调直流电源（30 V / 5 A）。</strong> 这是全桌最贵的东西，也是我最后悔买晚的。
+      在这之前我用一堆 USB 充电器和电池供电，于是所有"莫名其妙的复位"都被我归因为软件。
+      有了它之后，我能直接看到电流曲线——电机启动时拉多少、什么时候拉、持续多久，
+      一眼就知道该加多大的电容。上一篇文章里那个 0.42 V 的跌落，就是它帮我定量复现的。</p>
+
+    <p><strong>四位半万用表。</strong> 用得最多的是蜂鸣档和电压档。电流档我一年用不到十次，
+      因为电流我更信任电源上的读数。买的时候别纠结精度，纠结表笔——好表笔比好表更影响体验。</p>
+
+    <p><strong>手持示波器（100 MHz）。</strong> 不是每天都用，但每次用都是关键场合。
+      我买它是为了看 PWM 波形，后来发现它最大的价值是"让你停止猜测"：
+      信号到底有没有、什么时候有、多宽，看一眼就结束了争论。</p>
+
+    <figure class="figure">
+      <svg viewBox="0 0 800 260" role="img" aria-label="桌面布局俯视示意">
+        <rect x="40" y="30" width="720" height="200" fill="none" stroke-width="1.6" style="stroke:var(--text-3)"/>
+        <g stroke-opacity=".25" stroke-width="1" stroke-dasharray="3 4" style="stroke:var(--text-3)">
+          <path d="M40 130 H760"/>
+          <path d="M400 30 V230"/>
+        </g>
+        <g font-family="ui-monospace,Consolas,monospace" font-size="11" fill-opacity=".8" style="fill:var(--text-3)">
+          <rect x="70" y="55" width="120" height="52" fill="none" style="stroke:var(--text-3)"/>
+          <text x="130" y="86" text-anchor="middle">电源</text>
+          <rect x="210" y="55" width="90" height="52" fill="none" style="stroke:var(--text-3)"/>
+          <text x="255" y="86" text-anchor="middle">示波器</text>
+          <rect x="320" y="55" width="70" height="52" fill="none" style="stroke:var(--text-3)"/>
+          <text x="355" y="86" text-anchor="middle">万用表</text>
+          <rect x="70" y="152" width="150" height="56" fill="none" style="stroke:var(--text-3)"/>
+          <text x="145" y="184" text-anchor="middle">面包板 / 待测板</text>
+          <rect x="240" y="152" width="90" height="56" fill="none" style="stroke:var(--text-3)"/>
+          <text x="285" y="184" text-anchor="middle">烙铁</text>
+          <rect x="430" y="70" width="290" height="90" fill="none" stroke-opacity=".5" style="stroke:var(--text-3)"/>
+          <text x="575" y="118" text-anchor="middle" fill-opacity=".55" style="fill:var(--text-3)">显示器 / 键盘</text>
+          <rect x="450" y="176" width="120" height="32" fill="none" style="stroke:var(--text-3)"/>
+          <text x="510" y="197" text-anchor="middle">笔记本</text>
+        </g>
+        <g font-family="ui-monospace,Consolas,monospace" font-size="10" style="fill:var(--amber)">
+          <text x="640" y="60">常动区</text>
+          <text x="640" y="228">固定区</text>
+        </g>
+      </svg>
+      <figcaption><b>图 01</b> — 桌面分区原则：右手边（常动区）只放今天在用的东西，其余全部收进抽屉。</figcaption>
+    </figure>
+
+    <h2><span class="h2num">02</span>焊接与连接</h2>
+
+    <p><strong>恒温烙铁（T12 头）。</strong> 从 30 块的外热式换过来，是这几年来性价比最高的一次升级。
+      真正的差别不是温度准，是<em>回温快</em>——焊一块大面积接地铜皮时，便宜烙铁会让你怀疑人生。</p>
+
+    <p><strong>细锡丝（0.6 mm，含松香）。</strong> 0.8 mm 用在 0603 上太多了，0.4 mm 又太慢。
+      0.6 是个中间值，我基本只买这个规格。</p>
+
+    <p><strong>杜邦线一盒 + 硅胶线若干。</strong> 杜邦线是消耗品，我每年扔掉一把接触不良的。
+      这里唯一的经验：<mark>看起来还能用的杜邦线，往往是排查三天之后的真凶</mark>。
+      我现在遇到间歇性问题，第一件事是把所有杜邦线换掉。</p>
+
+    <p><strong>压线钳和冷压端子。</strong> 真正需要长期可靠的连接时，别用杜邦线。
+      这一套我用得不多，但每次用都庆幸买了。</p>
+
+    <h2><span class="h2num">03</span>固定与结构</h2>
+
+    <p><strong>3D 打印机（入门级 FDM）。</strong> 买之前我以为会打很多外壳，
+      实际上打得最多的是<em>支架</em>和<em>治具</em>。上一篇文章里那个抖动的云台，
+      最后是用 3 mm 铝板解决的，但在此之前的三个验证版本，全是打印件——
+      它让我在两天里试了三种结构，而不是等一周的机加工。</p>
+
+    <p><strong>一套内六角螺丝（M2 / M2.5 / M3）。</strong> 分格盒装的，几十块钱。
+      这是全桌最不起眼但最救命的东西。缺一颗螺丝会让整个下午停摆。</p>
+
+    <p><strong>热熔胶枪。</strong> 我知道这不专业。但在验证阶段，能把东西固定在某个位置，
+      比固定得漂亮重要得多。</p>
+
+    <h2><span class="h2num">04</span>纸、光、和一杯水</h2>
+
+    <p><strong>台灯（可调色温、无频闪）。</strong> 焊了一晚上之后眼睛累不累，一半取决于它。
+      别在这上面省钱。</p>
+
+    <p><strong>A4 打印纸一包。</strong> 这个我在<a href="/posts/serial-log-day.html">上一篇</a>里写过：
+      把日志打印出来铺在地板上，我用它找到了三个模块同时报错的规律。
+      屏幕只能一屏一屏地看，纸能让你一次看到全貌。</p>
+
+    <p><strong>方格笔记本 + 一支 0.38 的笔。</strong> 手写的理由我<a href="/posts/handwriting-notes.html">另外写了一篇</a>，
+      这里只说一点：它就在手边，不需要开机。</p>
+
+    <p><strong>带盖的水杯。</strong> 最后一件，也是我认为最容易被忽略的一件。
+      不带盖的杯子放在桌上的第三年，我打翻了一杯水在电源上。带盖之后，这件事再没发生过。</p>
+
+    <h2><span class="h2num">05</span>半年换了三回的那些</h2>
+
+    <p>桌上还有一类东西，我一直在换：USB 集线器、无线鼠标、各种转接头、蓝牙音箱。
+      它们的共同点是：<strong>我并不真的依赖它们的可靠性</strong>。
+      坏了就换，不影响主线工作。</p>
+
+    <p>而真正常驻的十四件有个共同特征：<em>它们坏掉的那天，我的工作会直接停摆</em>。
+      判断一件工具值不值得买好的，我觉得就看这一条。</p>
+
+    <dl class="revision">
+      <dt>2026.09.10 更新</dt>
+      <dd>杜邦线那一段补了一句：间歇性故障先换线。过去三个月我遇到两次，两次都是线。</dd>
+    </dl>
+  </div>
+
+  <aside class="notes">
+    <div class="notes__inner">
+      <div class="notes__toc"></div>
+      <p class="marginnote" style="margin-top:20px">
+        <b>关于烙铁。</b> T12 头是白菜白光那一类，头子几块钱一个，烧坏了不心疼。
+        真正的门槛是回温速度，不是标称功率。
+      </p>
+      <p class="marginnote">
+        <b>120 × 60 是我试过 140 × 70 之后退回来的尺寸。</b>
+        桌子大了，东西就会摊开，摊开之后你就不知道什么是常用的了。
+      </p>
+    </div>
+  </aside>
+</div>

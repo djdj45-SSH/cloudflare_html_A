@@ -1,0 +1,13 @@
+# Cloudflare Pages 重定向规则
+# 语法：源路径  目标路径  状态码
+
+/rss                /feed.xml   200
+/feed               /feed.xml   200
+/index              /           301
+/home               /           301
+/posts              /archive.html 301
+/about/             /about.html 301
+/archive/           /archive.html 301
+
+# 兜底：未匹配的路径交给 404.html（Pages 会自动使用它，这里只是显式声明）
+/*                  /404.html   404

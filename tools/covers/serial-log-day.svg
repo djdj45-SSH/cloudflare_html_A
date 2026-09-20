@@ -1,0 +1,46 @@
+<!-- 示波器风格示意图：含一次信号中断 -->
+<svg viewBox="0 0 900 560" role="img" aria-label="信号波形示意图，包含一次约 3.2 秒的信号中断">
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-opacity=".18" style="stop-color:var(--phos)"/>
+      <stop offset="100%" stop-opacity="0" style="stop-color:var(--phos)"/>
+    </linearGradient>
+  </defs>
+  <!-- 网格 -->
+  <g stroke-width="1" stroke-opacity=".55" style="stroke:var(--line-3)">
+    <path d="M64 80H860M64 160H860M64 240H860M64 320H860M64 400H860M64 480H860"/>
+    <path d="M64 60V500M164 60V500M264 60V500M364 60V500M464 60V500M564 60V500M664 60V500M764 60V500M860 60V500"/>
+  </g>
+  <!-- 坐标轴 -->
+  <g stroke-width="1.4" fill="none" style="stroke:var(--text-3)">
+    <path d="M64 500H864"/>
+    <path d="M64 56V500"/>
+  </g>
+  <!-- 主波形（手绘感的不规则折线） -->
+  <path d="M66 287 L66 287 L72 243 L78 205 L84 178 L90 164 L96 162 L102 170 L108 183 L114 197 L120 207 L126 214 L132 216 L138 218 L144 222 L150 233 L156 252 L162 279 L168 312 L174 347 L180 378 L186 398 L192 406 L198 398 L204 377 L210 347 L216 314 L222 282 L228 256 L234 238 L240 228 L246 224 L252 222 L258 219 L264 211 L270 198 L276 183 L282 170 L288 162 L294 164 L300 179 L306 207 L312 245 L318 289 L324 333 L330 370 L336 396 L342 410 L348 412 L354 404 L360 392 L366 379 L372 370 L378 365 L384 363 L390 362 L396 358 L402 346 L408 326 L414 297 L420 263 L426 227 L432 196 L438 175 L444 168 L450 176 L456 197 L462 226 L468 259 L474 290 L480 314 L486 330 L492 339 L498 343 L504 345 L634 185 L640 150 L646 163 L652 198 L658 223 L665 233 L671 247 L677 289 L683 351 L689 398 L695 398 L701 346 L707 276 L713 227 L720 211 L726 212 L732 203 L738 183 L744 176 L750 211 L756 288 L762 371 L768 420 L774 418 L781 387 L787 360 L793 349 L799 338 L805 303 L811 241 L817 184 L823 169 L829 208 L836 276 L842 332 L848 354 L854 356 L860 363 L504 287 L634 287"
+        fill="none" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" style="stroke:var(--phos)"/>
+  <!-- 中断区间 -->
+  <rect x="504" y="60" width="130" height="440" fill-opacity=".07" style="fill:var(--amber)"/>
+  <rect x="504" y="60" width="130" height="440" fill="none" stroke-width="1.4" stroke-dasharray="7 5" style="stroke:var(--amber)"/>
+  <path d="M504 287H634" stroke-width="2.4" fill="none" stroke-linecap="round" style="stroke:var(--amber)"/>
+  <!-- 标注 -->
+  <g stroke-width="1.4" fill="none" style="stroke:var(--amber)">
+    <path d="M569 60V34M569 34H676"/>
+  </g>
+  <text x="682" y="39" font-family="ui-monospace,Consolas,monospace" font-size="15" letter-spacing="1.5" style="fill:var(--amber)">3.2 s 无信号</text>
+  <text x="196" y="96" font-family="ui-monospace,Consolas,monospace" font-size="14" letter-spacing="1.5" style="fill:var(--text-3)">TX 突发</text>
+  <!-- 刻度 -->
+  <g font-family="ui-monospace,Consolas,monospace" font-size="12" style="fill:var(--text-3)">
+    <text x="56" y="522">0</text>
+    <text x="160" y="522">1s</text>
+    <text x="260" y="522">2s</text>
+    <text x="360" y="522">3s</text>
+    <text x="460" y="522">4s</text>
+    <text x="560" y="522">5s</text>
+    <text x="660" y="522">6s</text>
+    <text x="760" y="522">7s</text>
+  </g>
+  <!-- 角标 -->
+  <rect x="812" y="466" width="48" height="34" style="fill:var(--phos)"/>
+  <text x="820" y="489" font-family="ui-monospace,Consolas,monospace" font-size="14" style="fill:var(--bg)">05</text>
+</svg>

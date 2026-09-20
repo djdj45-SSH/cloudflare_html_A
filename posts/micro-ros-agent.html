@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>micro_ros_agent 装不上的三个原因 — 余量 MARGIN</title>
+<meta name="description" content="ros2 run 报 Package not found，全盘搜索也是空的。真正花时间的不是编译，是三个不给你任何提示的前置坑。">
+<link rel="canonical" href="https://margin.pages.dev/posts/micro-ros-agent.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="micro_ros_agent 装不上的三个原因 — 余量 MARGIN">
+<meta property="og:description" content="报 Package not found，但问题不在包管理。">
+<meta property="og:url" content="https://margin.pages.dev/posts/micro-ros-agent.html">
+<meta name="theme-color" content="#070808">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/rss+xml" title="余量 MARGIN RSS" href="/feed.xml">
+<link rel="stylesheet" href="/assets/css/site.css">
+<script>
+/* 定主题 + 标记 JS 可用（避免无 JS 时内容被进场动画藏起来） */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('margin-theme'); } catch (e) {}
+  if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'night';
+  document.documentElement.setAttribute('data-theme', t || 'night');
+  document.documentElement.classList.add('js');
+})();
+</script>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="scanlines" aria-hidden="true"></div>
+<div class="progress"><div class="progress__bar"></div></div>
+
+<!-- build:nav -->
+<!-- ===================== 导航（毛玻璃） ===================== -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a class="brand" href="/"><b>余量</b><span>MARGIN</span></a>
+    <nav class="nav__links" aria-label="主导航">
+      <a href="/">首页</a>
+      <a href="/archive.html">归档</a>
+      <a href="/tags/index.html">标签</a>
+      <a href="/changelog.html">更新</a>
+      <a href="/about.html">关于</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="切换明室 / 暗房">
+        <svg class="theme-icon--moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="theme-icon--sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn nav__burger" type="button" data-drawer-open aria-label="打开菜单" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- 抽屉 + 遮罩 -->
+<div class="overlay" data-drawer-close aria-hidden="true"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" aria-label="站点菜单">
+  <div class="drawer__head">
+    <span class="label">MARGIN · 索引</span>
+    <button class="icon-btn" type="button" data-drawer-close aria-label="关闭菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <nav aria-label="移动端导航">
+    <a href="/">首页 <span>01</span></a>
+    <a href="/archive.html">归档 <span>02</span></a>
+    <a href="/tags/index.html">标签 <span>03</span></a>
+    <a href="/changelog.html">更新 <span>04</span></a>
+    <a href="/about.html">关于 <span>05</span></a>
+    <a href="/feed.xml">RSS <span>06</span></a>
+  </nav>
+  <div class="drawer__foot">
+    <button class="btn" type="button" data-theme-toggle style="width:100%;justify-content:center">切换明室 / 暗房</button>
+  </div>
+</aside>
+<!-- /build:nav -->
+
+<main id="main">
+  <article>
+    <header class="wrap article-head">
+      <div class="kicker">通信 · No.07 · micro-ROS / ROS 2</div>
+      <h1>micro_ros_agent 装不上的三个原因</h1>
+      <p class="standfirst">在一个刚装好的 ROS 2 环境里敲下第一句命令，得到的是 Package not found。接下来两个小时，真正浪费时间的不是编译。</p>
+      <div class="byline">
+        <span><time datetime="2026-08-13">2026.08.13</time></span>
+        <span class="dot"></span><span data-readtime>约 12 分钟</span>
+        <span class="dot"></span><span>4,290 字</span>
+        <span class="dot"></span><span>ROS 2 · Ubuntu aarch64 · colcon</span>
+      </div>
+      <div class="ptags"><a class="tag" href="/tags/ros2.html">ROS 2</a>
+        <a class="tag" href="/tags/micro-ros.html">micro-ROS</a>
+        <a class="tag" href="/tags/env.html">环境</a></div>
+    </header>
+
+    <div class="wrap article-body">
+      <div class="prose">
+        <p class="first">在一个刚装好的 ROS 2 环境里，我敲下第一句命令：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>第一次尝试</span></div>
+    <pre>$ ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
+    Package 'micro_ros_agent' not found</pre>
+        </div>
+
+        <p>然后是全盘搜索，结果是空的。这台机器上根本没有这个包，也从来没安装过。</p>
+
+        <p>接下来我花了大概两个小时，把「装上它」这件事做完。真正浪费时间的不是编译，
+          而是三个前置的坑——它们都不会给你明确的提示，只会让你在错误的路上反复尝试。</p>
+
+        <h2><span class="h2num">01</span>原因一：它不在 apt 里</h2>
+
+        <p>最根本的一条：<strong><code>micro_ros_agent</code> 不是 ROS 2 自带的包，官方也不提供 apt 二进制</strong>。
+          你在 <code>apt search ros-humble-*</code> 里翻多久都找不到它。</p>
+
+        <p>原因不难理解：micro-ROS 是给单片机用的，Agent 要跑在哪台主机、连什么传输
+          （UDP、串口、TCP、还是 CAN），取决于你的具体场景。官方把这部分留给你自己编译。</p>
+
+        <p>所以「装它」这件事的本质是：<em>从源码构建一个 ROS 2 功能包</em>。
+          这就注定要走 <code>colcon build</code> 那条路，而不是 <code>apt install</code>。</p>
+
+        <h2><span class="h2num">02</span>原因二：shell 没 source ROS 2</h2>
+
+        <p>第二个坑不会报错，只会让你困惑。我当时的环境里 <code>ROS_DISTRO</code> 是空的：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>前置检查</span></div>
+    <pre>$ source /opt/ros/humble/setup.bash
+    $ echo $ROS_DISTRO
+    humble
+    $ ros2 --help            <span class="c"># 能出帮助信息，说明这一步对了</span></pre>
+        </div>
+
+        <p>没 source 的时候，<code>ros2</code> 命令往往还能跑（因为二进制在 PATH 里），
+          但很多环境变量是空的，于是后面 <code>rosdep</code>、<code>colcon</code> 的行为会变得莫名其妙。</p>
+
+        <p>我的做法是直接把这一行写进 <code>~/.bashrc</code>，一劳永逸：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>~/.bashrc</span></div>
+    <pre>source /opt/ros/humble/setup.bash</pre>
+        </div>
+
+        <p>注意发行版名字要对上——你装的是 humble 还是 jazzy，看 <code>/opt/ros/</code> 下面那个目录名就知道。</p>
+
+        <h2><span class="h2num">03</span>原因三：克隆失败，而且不告诉为什么</h2>
+
+        <p>第三个坑最有意思：这台机器<strong>访问 GitHub 的下载通道被网络设备拦了</strong>。
+          git 协议、tarball 下载、API 调用全部不通，只有网页能正常打开。</p>
+
+        <p>这种环境的麻烦在于，它不会给你一个「网络被拦截」的错误，而是给你超时、
+          连接重置、或者干脆卡住——你会先怀疑自己打错了命令，然后怀疑 GitHub 挂了。</p>
+
+        <p>后来我用了两种绕法。第一种是浏览器手动下载 zip：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>方式 B：手动下载（网络受限时用）</span></div>
+    <pre><span class="c"># 1. 浏览器打开并下载：</span>
+    <span class="c">#    https://github.com/micro-ROS/micro_ros_agent/archive/refs/heads/master.zip</span>
+    <span class="c"># 2. 把 zip 传到目标机器后：</span>
+    mkdir -p ~/microros_ws/src
+    cd ~/microros_ws/src
+    unzip ~/micro_ros_agent-master.zip
+    mv micro_ros_agent-master micro_ros_agent</pre>
+        </div>
+
+        <p>第二种是走镜像加速（可用性随时间变化，不一定每次都灵）：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>方式 C：镜像加速</span></div>
+    <pre>curl -L -o agent.zip \
+      "https://ghfast.top/https://github.com/micro-ROS/micro_ros_agent/archive/refs/heads/master.zip"</pre>
+        </div>
+
+        <p>无论用哪种方式，<mark>关键是最后目录结构要长成 <code>~/microros_ws/src/micro_ros_agent/</code></mark>——
+          colcon 认的是这个形状，中间多套一层文件夹它不会报错，只会静默地什么都编译不出来。</p>
+
+        <h2><span class="h2num">04</span>编译</h2>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>构建</span></div>
+    <pre>sudo apt-get update
+    sudo apt-get install -y git cmake python3-pip python3-rosdep
+    sudo rosdep init        <span class="c"># 提示已初始化就跳过</span>
+    rosdep update
+
+    cd ~/microros_ws
+    source /opt/ros/humble/setup.bash
+    rosdep install --from-paths src --ignore-src -r -y
+    colcon build --symlink-install</pre>
+        </div>
+
+        <p>在 aarch64 上大概要 5 到 15 分钟。中途如果报缺系统库，
+          用 <code>apt-cache search &lt;关键字&gt;</code> 找一下装上去就行，不用慌。</p>
+
+        <p>编译完成后验证，这一步<strong>必须 source 新工作空间</strong>，否则你还是会看到
+          「Package not found」——而且是同一个报错，很容易以为编译白做了：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>验证</span></div>
+    <pre>source ~/microros_ws/install/setup.bash
+    ros2 pkg list | grep micro_ros_agent     <span class="c"># 能列出来就算成功</span></pre>
+        </div>
+
+        <h2><span class="h2num">05</span>连上之后，才算真正开始</h2>
+
+        <p>启动 Agent：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>启动 Agent</span></div>
+    <pre>ros2 run micro_ros_agent micro_ros_agent udp4 -i 192.168.31.100 --port 8888</pre>
+        </div>
+
+        <p>ESP32 那边烧好程序一连上，日志会刷出一长串。这几行是握手成功的标志：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>Agent 日志</span></div>
+    <pre>[1786983463.562502] info | UDPv4AgentLinux.cpp | init              | running...            | port: 8888
+    [1786983475.555139] info | Root.cpp            | create_client     | create                | client_key: 0x0EA1126F, session_id: 0x81
+    [1786983475.555289] info | SessionManager.hpp  | establish_session | session established   | client_key: 0x0EA1126F, address: 10.230.61.237:47138
+    [1786983475.628974] info | ProxyClient.cpp     | create_participant| participant created   | client_key: 0x0EA1126F, participant_id: 0x000(1)
+    [1786983475.887035] info | ProxyClient.cpp     | create_topic      | topic created         | client_key: 0x0EA1126F, topic_id: 0x000(2)
+    [1786983476.033583] info | ProxyClient.cpp     | create_publisher  | publisher created     | client_key: 0x0EA1126F, publisher_id: 0x000(3)
+    [1786983476.243162] info | ProxyClient.cpp     | create_datareader | datareader created    | client_key: 0x0EA1126F, datareader_id: 0x000(6)</pre>
+        </div>
+
+        <p>读日志能读出两件事：</p>
+
+        <ul>
+          <li><strong>首次连接花了大约 12 秒</strong>（<code>init</code> 到 <code>create_client</code> 之间），
+            这不是 bug，是 UDP 广播发现机制的正常代价。</li>
+          <li><strong>实体是在 0.7 秒内逐个建起来的</strong>：participant → topic → publisher → subscriber → reader。
+            如果卡在某一行不动了，你就知道是哪个环节没走通。</li>
+        </ul>
+
+        <p>还有一个我当时没在意、后来才觉得可疑的细节：Agent 监听在 <code>192.168.31.100</code>，
+          但会话里记录的客户端地址是 <code>10.230.61.237</code>。<em>两者不在同一网段</em>，
+          说明中间还有一层设备在做地址转换。这类不对称值得记一笔——
+          它常常是「能握手，但数据不稳」的根源。</p>
+
+        <h2><span class="h2num">06</span>握手成功 ≠ 数据流畅</h2>
+
+        <p>看到 <code>session established</code> 时我松了一口气，以为最难的部分过去了。
+          然后我测了一下话题频率：</p>
+
+        <div class="codeblock">
+          <div class="codeblock__bar"><span>ros2 topic hz /robot/ping</span></div>
+    <pre>average rate: 0.330
+            min: 3.030s max: 3.030s std dev: 0.00000s window: 1
+    average rate: 0.276
+            min: 3.030s max: 4.814s std dev: 0.63409s window: 5
+    average rate: 0.448
+            min: 0.027s max: 4.814s std dev: 1.65541s window: 9
+    average rate: 0.745
+            min: 0.024s max: 4.814s std dev: 1.29310s window: 22</pre>
+        </div>
+
+        <p>最慢的一次间隔是 4.814 秒，最快 0.024 秒，标准差一度到 1.65 秒。
+          也就是说：连接是通的，消息也确实在到达，但<strong>节奏完全不可控</strong>。</p>
+
+        <p>对 ping/pong 这种测试无所谓，对控制指令就很致命了。
+          这份输出是我后来去查局域网延迟的起点——那次排查写在了
+          <a href="/posts/wifi-ros2-latency.html">另一篇笔记</a>里。</p>
+
+        <h2><span class="h2num">07</span>一张排查表</h2>
+
+        <table>
+          <thead>
+            <tr>
+              <th>现象</th>
+              <th>先查什么</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ros2 run</code> 报 Package not found</td>
+              <td>是不是没 <code>source ~/microros_ws/install/setup.bash</code>？编译真的成功了吗？</td>
+            </tr>
+            <tr>
+              <td>clone 卡住或超时</td>
+              <td>换浏览器手动下载 zip，或走镜像加速</td>
+            </tr>
+            <tr>
+              <td>colcon 编译 0 个包</td>
+              <td>目录层级对不对？（必须是 <code>src/micro_ros_agent/package.xml</code>）</td>
+            </tr>
+            <tr>
+              <td>Agent 起来了但 ESP32 连不上</td>
+              <td>防火墙放行 UDP 端口；确认 <code>-i</code> 绑的是本机真实 IP</td>
+            </tr>
+            <tr>
+              <td>端口被占用</td>
+              <td><code>ros2 daemon stop</code>，或者换端口（两边要一致）</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2><span class="h2num">08</span>一句话总结</h2>
+
+        <p>装 micro-ROS Agent 的难点不在编译，在<strong>先确认你面对的是哪一类问题</strong>：
+          是「包不存在」（要编译），是「环境没准备好」（要 source），
+          还是「源码拿不到」（要绕网络）。这三件事的解法完全不同，
+          但它们在终端里长得一模一样——都是某句命令没反应。</p>
+
+        <p>分清楚了，剩下的事情二十分钟就能做完。</p>
+
+        <dl class="revision">
+          <dt>关于本文</dt>
+          <dd>整理自 2026 年 8 月的便签记录，日志为当时的真实输出（ROS 2 / Ubuntu on aarch64）。
+            系统版本与包名请按自己的环境替换。</dd>
+          <dt>2026.09.20 整理</dt>
+          <dd>补上了 <code>ros2 topic hz</code> 那段数据——原始笔记里只写了「好像不太稳」，
+            把数字摊开之后才看清问题的量级。</dd>
+        </dl>
+      </div>
+
+      <aside class="notes">
+        <div class="notes__inner">
+          <div class="notes__toc"></div>
+          <p class="marginnote" style="margin-top:20px">
+            <b>为什么要 <code>-i</code> 指定 IP。</b>
+            不加这个参数时 Agent 可能绑到 <code>0.0.0.0</code>，多网卡机器上会选错出口。
+            指定成本机真实 IP 能省掉一类「本地能连、外部连不上」的问题。
+          </p>
+          <p class="marginnote">
+            <b>12 秒的首次连接。</b> 这是 UDP 发现阶段的正常耗时，不是故障。
+            如果你希望它更快，改用串口传输会明显缩短——
+            代价是要多占一个 USB 口。
+          </p>
+          <p class="marginnote">
+            <b>别把 <code>session established</code> 当成验收通过。</b>
+            它只证明「握手成功」，不证明「数据流动得动」。
+            真正的验收指标是话题频率的稳定性，也就是那个 std dev。
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="wrap pager" aria-label="文章导航">
+      <a href="/posts/servo-jitter.html">
+        <span class="pager__label">← 更早的一篇</span>
+        <span class="pager__title">舵机抖动的三种可能</span>
+      </a>
+      <a href="/posts/phone-as-host.html">
+        <span class="pager__label">较新的一篇 →</span>
+        <span class="pager__title">把手机变成 ROS 2 上位机</span>
+      </a>
+    </nav>
+
+    <section class="wrap related">
+      <h2 class="blockhead">顺着读下去<span class="blockhead__line"></span></h2>
+      <div class="related__list">
+        <a class="relitem" href="/posts/phone-as-host.html">
+          <span class="relitem__meta">08.13 · 环境</span>
+          <span class="relitem__title">把手机变成 ROS 2 上位机</span>
+          <span class="relitem__sum">neofetch 的三条线索、三个坑，以及实测出来的 0.5 Hz。</span>
+        </a>
+        <a class="relitem" href="/posts/qos-tf-static.html">
+          <span class="relitem__meta">08.30 · 通信</span>
+          <span class="relitem__title">内容对了，为什么没送到</span>
+          <span class="relitem__sum">transient_local 遇上 volatile：消息就躺在话题里，订阅者却主动拒绝接收。</span>
+        </a>
+        <a class="relitem" href="/posts/wifi-ros2-latency.html">
+          <span class="relitem__meta">08.27 · 通信</span>
+          <span class="relitem__title">Wi-Fi 上跑 ROS 2，是一种什么体验</span>
+          <span class="relitem__sum">局域网里 100 ms 的 ping 不正常。我用 iperf、信道扫描和一根网线，把这笔账算清楚了——大部分。</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="wrap comments" data-comments data-slug="micro-ros-agent" data-api="">
+      <h2 class="blockhead">留言<span class="blockhead__note" data-comments-count></span></h2>
+
+      <form class="cform" data-comments-form hidden>
+        <div class="cform__top">
+          <input class="cform__nick" type="text" name="nick" maxlength="24" autocomplete="off"
+                 placeholder="昵称（可留空）">
+          <span class="cform__replying" data-reply-hint hidden>
+            正在回复 <b data-reply-to></b>
+            <button type="button" class="cform__cancel" data-reply-cancel>取消</button>
+          </span>
+        </div>
+        <textarea class="cform__body" name="body" rows="3" maxlength="2000" required
+                  placeholder="说点什么…空行分段，**粗体** 和 `代码` 也认"></textarea>
+        <div class="cform__bottom">
+          <span class="cform__meta">完全匿名 · 不需要登录 · 昵称可留空</span>
+          <button class="btn btn--solid" type="submit" data-comments-submit>发表</button>
+        </div>
+        <input class="cform__trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <input type="hidden" name="elapsed" value="0">
+      </form>
+
+      <p class="comments__state" data-comments-state>正在载入留言…</p>
+      <ol class="clist" data-comments-list></ol>
+    </section>
+  </article>
+</main>
+
+<!-- build:footer -->
+<footer class="sitefoot">
+  <div class="wrap">
+    <div class="sitefoot__grid">
+      <div>
+        <h4>关于这里</h4>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
+          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+      </div>
+      <div>
+        <h4>索引</h4>
+        <ul>
+          <li><a href="/">首页</a></li>
+          <li><a href="/archive.html">归档与搜索</a></li>
+          <li><a href="/about.html">关于与联系</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>订阅与信息</h4>
+        <ul>
+          <li><a href="/feed.xml">RSS 全文输出</a></li>
+          <li><a href="/sitemap.xml">站点地图</a></li>
+          <li><a href="mailto:hello@example.com">hello@example.com</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="colophon">
+      <span>静态托管 Cloudflare Pages · 无追踪 · 无 Cookie · 无第三方脚本</span>
+      <span>标题 系统黑体 · 元信息 等宽 · 波形 Canvas 实时绘制</span>
+      <span>© 2026 MARGIN</span>
+    </div>
+  </div>
+</footer>
+<!-- /build:footer -->
+
+<script src="/assets/js/site.js"></script>
+<script src="/assets/js/comments.js" defer></script>
+</body>
+</html>
