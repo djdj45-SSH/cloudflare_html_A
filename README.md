@@ -16,11 +16,15 @@ cloudflare_html_A/
 │   ├── build.mjs              构建脚本（node tools/build.mjs）
 │   └── pre-commit.sample      git 钩子示例：防止忘了跑构建
 │
-├── worker/                    ← 留言板后端（Cloudflare Workers + D1，独立部署）
-│   ├── index.js               接口实现（含四层防垃圾）
+├── worker/                    ← 留言板后端
+│   ├── comments-core.js       核心逻辑（唯一实现，被两处引用）
+│   ├── index.js               独立 Worker 入口（备用）
 │   ├── schema.sql             建表语句
 │   ├── wrangler.toml          部署配置
 │   └── README.md              部署步骤与站长用法
+│
+├── functions/                 ← 留言板 API 主入口（Pages Function，随站点一起部署）
+│   └── api/[[path]].js        对外即 /api/*，与站点同源
 │
 ├── index.html                 ← 以下是生成物。带 build 锚点的区块会被覆盖
 ├── archive.html               归档（含实时搜索）
@@ -192,21 +196,37 @@ node tools/build.mjs
 | **相关文章**（文章末尾 3 篇） | 按标签重合度打分，同分类额外加权，同分时新的优先 |
 | **更新记录** `/changelog.html` | 自动抽取每篇文章末尾 `<dl class="revision">` 里的每一条 dt/dd，按日期倒序汇总 |
 | **RSS 全文输出** | `description` 放摘要，`content:encoded` 放正文（CDATA 包裹），站内链接自动转绝对地址 |
-| **留言板** | 文章页底部，前端在 `assets/js/comments.js`，后端在 `worker/`，见 `worker/README.md` |
+| **留言板** | 文章页底部，前端 `assets/js/comments.js`，API 走同源 `/api`（`functions/`），逻辑在 `worker/comments-core.js` |
 | **head 绝对地址** | `canonical` / `og:url` 自动归到 `site.url` 名下，手写外壳页也覆盖（只换 origin、保留路径） |
 
 想让相关文章更准，就把标签打得更细一点；想让它彻底不出现，把 `HAS_RELATED` 那个判断去掉即可。
 
 ### 留言板
 
-完全匿名、不需要登录、不引入第三方脚本。**后端已经部署好了**：
+完全匿名、不需要登录、不引入第三方脚本。**已经上线并跑通了**。
 
-- Worker：`https://margin-comments.3554749491.workers.dev`（名字 `margin-comments`）
-- D1 数据库：`margin_comments`（id `3c7e1ad3-9df5-4c26-8b8c-2af9919166b8`，区域 WNAM）
-- 表 `comments` + 两个索引已建好；`OWNER_KEY` / `IP_SALT` 以 secret 形式保存
+架构上有一个关键选择：**API 由 Pages Function 提供，与站点同源**。
 
-想重新部署或换库，按 `worker/README.md` 走一遍：建库 → 建表 → 设密钥 → `wrangler deploy`，
-然后把 Worker 地址填回 `tools/posts.json` 的 `site.commentsApi`，重新构建即可。
+| | 地址 | 说明 |
+|---|---|---|
+| **主入口** | `https://blog.djdj45.top/api` | Pages Function `functions/api/[[path]].js` |
+| 备用入口 | `https://margin-comments.3554749491.workers.dev` | 独立 Worker，`worker/index.js` |
+
+为什么主入口不用 Worker：`*.workers.dev` 在部分网络（含国内）会被拦截，前端会直接报
+**`Failed to fetch`**——那是网络层错误，请求根本没到达服务端。改走同源之后，
+不再需要 CORS、没有预检往返，也不再依赖 workers.dev。
+
+- 两个入口**共用同一份实现** `worker/comments-core.js`，不会各自漂移。
+- 前端取的是**相对路径** `/api`（见 `tools/posts.json` 的 `site.commentsApi`），
+  所以 Preview 部署也能直接用同一套接口。
+- D1 数据库：`margin_comments`（id `3c7e1ad3-9df5-4c26-8b8c-2af9919166b8`），表 `comments` + 2 个索引。
+
+> ⚠️ **Pages Function 的 `env` 与独立 Worker 不共享。**
+> `OWNER_KEY` / `IP_SALT` / `ALLOWED_ORIGIN` 必须在 **Pages 项目**上单独配一遍
+> （D1 绑定 `DB` 同理），否则站长口令与 IP 加盐会静默失效。
+> 而且 Pages 的环境变量**改完必须重新部署**才生效——改完不会自动应用。
+> 详见 `worker/README.md`。
+
 `commentsApi` 留空时，文章页底部会显示一行「功能还没接上后端」的提示，不会报错。
 
 站长用法：打开任意文章页，地址后加 `?ownerKey=你的密钥`（只需一次，会记进浏览器），
