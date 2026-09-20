@@ -4,7 +4,7 @@
     "latin": "MARGIN",
     "url": "https://blog.djdj45.top",
     "email": "hello@example.com",
-    "commentsApi": "https://margin-comments.3554749491.workers.dev"
+    "commentsApi": "/api"
   },
   "posts": [
     {

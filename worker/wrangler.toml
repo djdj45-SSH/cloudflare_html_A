@@ -5,8 +5,19 @@ name = "margin-comments"
 main = "index.js"
 compatibility_date = "2025-09-01"
 
-# 部署后地址形如 https://margin-comments.<你的子域>.workers.dev
-# 把它填回 tools/posts.json 的 site.commentsApi，然后重新构建站点
+# ⚠️ 必须显式写 true。一旦文件里出现 routes，wrangler 会默认把 workers.dev 入口**关掉**
+#    （"Because 'workers_dev' is not in your Wrangler file, it will be disabled"）。
+#    踩过：加 routes 的同时没写这行 → 路由没建成 + workers.dev 被关 = 两个入口都没了。
+workers_dev = true
+
+# 【备选方案，当前未启用】把 API 也挂到站点自有域名下：blog.djdj45.top/api/*
+# 需要 token 具备 zone 作用域的 `Workers Routes: Edit`，当前 token 没有，故暂时注释。
+# 真正落地的是 Pages Functions（见仓库根目录 functions/api/[[path]].js），
+# 那条路同源、不需要任何额外权限、且随站点一起部署。
+#
+# routes = [
+#   { pattern = "blog.djdj45.top/api*", zone_name = "djdj45.top" }
+# ]
 
 [[d1_databases]]
 binding = "DB"                                  # 代码里用 env.DB 访问
