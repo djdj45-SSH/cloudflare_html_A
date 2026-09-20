@@ -2,9 +2,9 @@
   "site": {
     "name": "余量",
     "latin": "MARGIN",
-    "url": "https://margin.pages.dev",
+    "url": "https://blog.djdj45.top",
     "email": "hello@example.com",
-    "commentsApi": ""
+    "commentsApi": "https://margin-comments.3554749491.workers.dev"
   },
   "posts": [
     {

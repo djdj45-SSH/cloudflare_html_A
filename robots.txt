@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://margin.pages.dev/sitemap.xml
+Sitemap: https://blog.djdj45.top/sitemap.xml

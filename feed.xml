@@ -2,21 +2,21 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>余量 MARGIN</title>
-    <link>https://margin.pages.dev/</link>
+    <link>https://blog.djdj45.top/</link>
     <description>一个嵌入式工程师的调试笔记：ESP32、micro-ROS、传感器与工作台。记录失败、数据，以及被推翻过的结论。</description>
     <language>zh-CN</language>
     <managingEditor>hello@example.com (MARGIN)</managingEditor>
     <lastBuildDate>Sun, 20 Sep 2026 00:00:00 +0800</lastBuildDate>
-    <atom:link href="https://margin.pages.dev/feed.xml" rel="self" type="application/rss+xml"/>
+    <atom:link href="https://blog.djdj45.top/feed.xml" rel="self" type="application/rss+xml"/>
 
     <item>
       <title>读懂 ESP32 的启动日志</title>
-      <link>https://margin.pages.dev/posts/boot-log.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/boot-log.html</guid>
+      <link>https://blog.djdj45.top/posts/boot-log.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/boot-log.html</guid>
       <pubDate>Sun, 20 Sep 2026 00:00:00 +0800</pubDate>
       <category>固件</category>
       <description>复位原因、最大连续内存块、分区地址账本——开机日志里最该看的四个地方。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/boot-log.html">读懂 ESP32 的启动日志</a> · 2026.09.20</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/boot-log.html">读懂 ESP32 的启动日志</a> · 2026.09.20</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">每次按下复位键，ESP32 都会先喷出三十来行字。它们滚得太快，又长得像乱码，
@@ -57,7 +57,7 @@ mode:DIO, clock div:1</pre>
       <code>0x1</code> 是上电复位，也就是你拔插电源、或者按下复位键时会看到的那种；除此之外还有软件复位、
       看门狗复位、欠压复位等等。这一行是排查「设备莫名其妙重启」的起点：
       如果是看门狗，说明你的某段代码把 CPU 卡住了；如果指向欠压，那就去查电源——
-      我在<a href="https://margin.pages.dev/posts/serial-log-day.html">另一篇笔记</a>里就是靠这个思路找到电源问题的。
+      我在<a href="https://blog.djdj45.top/posts/serial-log-day.html">另一篇笔记</a>里就是靠这个思路找到电源问题的。
       完整的码表在 ESP-IDF 的 <code>esp_reset_reason()</code> 文档里，不用背。</p>
 
     <p><code>boot:0x13</code> 是启动模式，括号里的 <code>SPI_FAST_FLASH_BOOT</code> 才是给人看的部分——
@@ -257,12 +257,12 @@ entry 0x400805b4</pre>
 
     <item>
       <title>8 GB 显存里塞一个 27B 模型</title>
-      <link>https://margin.pages.dev/posts/local-27b-on-8gb.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/local-27b-on-8gb.html</guid>
+      <link>https://blog.djdj45.top/posts/local-27b-on-8gb.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/local-27b-on-8gb.html</guid>
       <pubDate>Sat, 19 Sep 2026 00:00:00 +0800</pubDate>
       <category>工具链</category>
       <description>GGUF 不等于兼容性保证、手动 -ngl 会关掉自动拟合，以及上下文长度对生成速度的真实影响。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/local-27b-on-8gb.html">8 GB 显存里塞一个 27B 模型</a> · 2026.09.19</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/local-27b-on-8gb.html">8 GB 显存里塞一个 27B 模型</a> · 2026.09.19</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">我手上有一台 8 GB 显存的笔记本，想在本地跑一个 27B 的模型。</p>
@@ -423,7 +423,7 @@ this can be a security risk</pre>
 
     <p>它默认只监听 <code>127.0.0.1</code>，所以在本机上用风险不大。
       但如果你想从别的设备访问（就像我在
-      <a href="https://margin.pages.dev/posts/local-llm-timing.html">另一篇笔记</a>里那样改成 <code>0.0.0.0</code>），
+      <a href="https://blog.djdj45.top/posts/local-llm-timing.html">另一篇笔记</a>里那样改成 <code>0.0.0.0</code>），
       就必须同时加上访问密钥，否则等于把一个可以随便调用的模型接口挂在了网上。</p>
 
     <h2><span class="h2num">06</span>8 GB 显存到底能做什么</h2>
@@ -460,12 +460,12 @@ this can be a security risk</pre>
 
     <item>
       <title>串口日志里的一天</title>
-      <link>https://margin.pages.dev/posts/serial-log-day.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/serial-log-day.html</guid>
+      <link>https://blog.djdj45.top/posts/serial-log-day.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/serial-log-day.html</guid>
       <pubDate>Mon, 14 Sep 2026 00:00:00 +0800</pubDate>
       <category>调试笔记</category>
       <description>设备每 40 秒掉线一次，规律得让人怀疑人生。我把三天的串口输出打印出来铺在地板上，才发现那段 3.2 秒的沉默里，藏着一个和电源有关的答案。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/serial-log-day.html">串口日志里的一天</a> · 2026.09.14</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/serial-log-day.html">串口日志里的一天</a> · 2026.09.14</em></p>
     <div class="wrap article-body">
       <!-- ================= 正文 ================= -->
       <div class="prose">
@@ -639,12 +639,12 @@ this can be a security risk</pre>
 
     <item>
       <title>那 7 秒里，6 秒在加载模型</title>
-      <link>https://margin.pages.dev/posts/local-llm-timing.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/local-llm-timing.html</guid>
+      <link>https://blog.djdj45.top/posts/local-llm-timing.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/local-llm-timing.html</guid>
       <pubDate>Mon, 31 Aug 2026 00:00:00 +0800</pubDate>
       <category>工具链</category>
       <description>让它对外说话、确认它在用什么算，以及把 7.13 秒拆成加载、读题、作答三笔账。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/local-llm-timing.html">那 7 秒里，6 秒在加载模型</a> · 2026.08.31</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/local-llm-timing.html">那 7 秒里，6 秒在加载模型</a> · 2026.08.31</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">一台没有独立显卡的机器，我想在上面跑一个语言模型，并且让局域网里的其他设备也能调用它。</p>
@@ -810,12 +810,12 @@ ps aux | grep "ollama serve" | grep -v grep</pre>
 
     <item>
       <title>内容对了，为什么没送到</title>
-      <link>https://margin.pages.dev/posts/qos-tf-static.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/qos-tf-static.html</guid>
+      <link>https://blog.djdj45.top/posts/qos-tf-static.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/qos-tf-static.html</guid>
       <pubDate>Sun, 30 Aug 2026 00:00:00 +0800</pubDate>
       <category>通信</category>
       <description>transient_local 遇上 volatile：消息就躺在话题里，订阅者却主动拒绝接收。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/qos-tf-static.html">内容对了，为什么没送到</a> · 2026.08.30</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/qos-tf-static.html">内容对了，为什么没送到</a> · 2026.08.30</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">RViz 里激光点云画得好好的，我随手把那个终端关掉了，点云还在。</p>
@@ -1021,12 +1021,12 @@ stamp: sec: 0, nanosec: 0 <span class="c"># 时间戳是 0</span></pre>
 
     <item>
       <title>Wi-Fi 上跑 ROS 2，是一种什么体验</title>
-      <link>https://margin.pages.dev/posts/wifi-ros2-latency.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/wifi-ros2-latency.html</guid>
+      <link>https://blog.djdj45.top/posts/wifi-ros2-latency.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/wifi-ros2-latency.html</guid>
       <pubDate>Thu, 27 Aug 2026 00:00:00 +0800</pubDate>
       <category>通信</category>
       <description>局域网里 100 ms 的 ping 不正常。我用 iperf、信道扫描和一根网线，把这笔账算清楚了——大部分。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/wifi-ros2-latency.html">Wi-Fi 上跑 ROS 2，是一种什么体验</a> · 2026.08.27</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/wifi-ros2-latency.html">Wi-Fi 上跑 ROS 2，是一种什么体验</a> · 2026.08.27</em></p>
     <div class="wrap article-body">
       <div class="prose">
         <p class="first">先说结论，省得你读到最后才发现这篇没有奇迹：我把延迟从 100 ms 压到了 12 ms，
@@ -1196,12 +1196,12 @@ rtt min/avg/max/mdev = <span class="n">6.118</span>/<span class="n">43.206</span
 
     <item>
       <title>在没有 systemd 的环境里让服务活下来</title>
-      <link>https://margin.pages.dev/posts/no-systemd-autostart.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/no-systemd-autostart.html</guid>
+      <link>https://blog.djdj45.top/posts/no-systemd-autostart.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/no-systemd-autostart.html</guid>
       <pubDate>Sat, 15 Aug 2026 00:00:00 +0800</pubDate>
       <category>环境</category>
       <description>把启动挂到登录 shell 上，以及 WSL2 里 DISPLAY 为什么会填成一个公网 DNS 地址。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/no-systemd-autostart.html">在没有 systemd 的环境里让服务活下来</a> · 2026.08.15</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/no-systemd-autostart.html">在没有 systemd 的环境里让服务活下来</a> · 2026.08.15</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">在一台 Android 手机里跑的 Ubuntu 上，我想让 SSH 服务跟着开机自动起来。
@@ -1355,12 +1355,12 @@ source ~/.bashrc</pre>
 
     <item>
       <title>把手机变成 ROS 2 上位机</title>
-      <link>https://margin.pages.dev/posts/phone-as-host.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/phone-as-host.html</guid>
+      <link>https://blog.djdj45.top/posts/phone-as-host.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/phone-as-host.html</guid>
       <pubDate>Thu, 13 Aug 2026 00:00:00 +0800</pubDate>
       <category>环境</category>
       <description>neofetch 的三条线索、三个坑，以及实测出来的 0.5 Hz。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/phone-as-host.html">把手机变成 ROS 2 上位机</a> · 2026.08.13</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/phone-as-host.html">把手机变成 ROS 2 上位机</a> · 2026.08.13</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">事情起因很简单：我不想每次调试都开电脑。</p>
@@ -1574,7 +1574,7 @@ average rate: 0.674     min: 1.009s max: 1.964s std dev: 0.43831s window: 4</pre
     <p>大约 0.5 到 0.75 Hz，最慢的间隔接近 2 秒，标准差 0.4 秒左右。也就是说：
       <mark>链路是通的，但节奏很鬆</mark>。对 ping/pong 测试无所谓，
       对需要稳定周期的控制指令就不够了——这和我在
-      <a href="https://margin.pages.dev/posts/wifi-ros2-latency.html">另一篇笔记</a>里追过的局域网延迟是同一类问题。</p>
+      <a href="https://blog.djdj45.top/posts/wifi-ros2-latency.html">另一篇笔记</a>里追过的局域网延迟是同一类问题。</p>
 
     <h2><span class="h2num">07</span>它的边界在哪</h2>
 
@@ -1642,12 +1642,12 @@ average rate: 0.674     min: 1.009s max: 1.964s std dev: 0.43831s window: 4</pre
 
     <item>
       <title>micro_ros_agent 装不上的三个原因</title>
-      <link>https://margin.pages.dev/posts/micro-ros-agent.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/micro-ros-agent.html</guid>
+      <link>https://blog.djdj45.top/posts/micro-ros-agent.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/micro-ros-agent.html</guid>
       <pubDate>Thu, 13 Aug 2026 00:00:00 +0800</pubDate>
       <category>通信</category>
       <description>没有 apt 包、shell 没 source、GitHub 通道被拦——三件事在终端里长得一模一样。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/micro-ros-agent.html">micro_ros_agent 装不上的三个原因</a> · 2026.08.13</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/micro-ros-agent.html">micro_ros_agent 装不上的三个原因</a> · 2026.08.13</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">在一个刚装好的 ROS 2 环境里，我敲下第一句命令：</p>
@@ -1815,7 +1815,7 @@ average rate: 0.745
 
     <p>对 ping/pong 这种测试无所谓，对控制指令就很致命了。
       这份输出是我后来去查局域网延迟的起点——那次排查写在了
-      <a href="https://margin.pages.dev/posts/wifi-ros2-latency.html">另一篇笔记</a>里。</p>
+      <a href="https://blog.djdj45.top/posts/wifi-ros2-latency.html">另一篇笔记</a>里。</p>
 
     <h2><span class="h2num">07</span>一张排查表</h2>
 
@@ -1875,12 +1875,12 @@ average rate: 0.745
 
     <item>
       <title>舵机抖动的三种可能</title>
-      <link>https://margin.pages.dev/posts/servo-jitter.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/servo-jitter.html</guid>
+      <link>https://blog.djdj45.top/posts/servo-jitter.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/servo-jitter.html</guid>
       <pubDate>Wed, 05 Aug 2026 00:00:00 +0800</pubDate>
       <category>硬件</category>
       <description>同一个角度指令，舵机却在原地发抖。电源、信号、机械——我按这个顺序一个个排除，第三种最意外。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/servo-jitter.html">舵机抖动的三种可能</a> · 2026.08.05</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/servo-jitter.html">舵机抖动的三种可能</a> · 2026.08.05</em></p>
     <div class="wrap article-body">
       <div class="prose">
         <p class="first">抖动这种故障有个特点：它看起来很小，但它会让你怀疑整个系统的精度。
@@ -2027,12 +2027,12 @@ average rate: 0.745
 
     <item>
       <title>我的工作台：一张桌上的十四件东西</title>
-      <link>https://margin.pages.dev/posts/workbench.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/workbench.html</guid>
+      <link>https://blog.djdj45.top/posts/workbench.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/workbench.html</guid>
       <pubDate>Sun, 19 Jul 2026 00:00:00 +0800</pubDate>
       <category>工作台</category>
       <description>不谈性能参数，只谈趁手。有些工具用了六年还是原样，有些半年就换了三回。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/workbench.html">我的工作台：一张桌上的十四件东西</a> · 2026.07.19</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/workbench.html">我的工作台：一张桌上的十四件东西</a> · 2026.07.19</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">桌面是 120 × 60 的，不算大。这个尺寸有个好处：伸手能够到所有东西，
@@ -2120,11 +2120,11 @@ average rate: 0.745
     <p><strong>台灯（可调色温、无频闪）。</strong> 焊了一晚上之后眼睛累不累，一半取决于它。
       别在这上面省钱。</p>
 
-    <p><strong>A4 打印纸一包。</strong> 这个我在<a href="https://margin.pages.dev/posts/serial-log-day.html">上一篇</a>里写过：
+    <p><strong>A4 打印纸一包。</strong> 这个我在<a href="https://blog.djdj45.top/posts/serial-log-day.html">上一篇</a>里写过：
       把日志打印出来铺在地板上，我用它找到了三个模块同时报错的规律。
       屏幕只能一屏一屏地看，纸能让你一次看到全貌。</p>
 
-    <p><strong>方格笔记本 + 一支 0.38 的笔。</strong> 手写的理由我<a href="https://margin.pages.dev/posts/handwriting-notes.html">另外写了一篇</a>，
+    <p><strong>方格笔记本 + 一支 0.38 的笔。</strong> 手写的理由我<a href="https://blog.djdj45.top/posts/handwriting-notes.html">另外写了一篇</a>，
       这里只说一点：它就在手边，不需要开机。</p>
 
     <p><strong>带盖的水杯。</strong> 最后一件，也是我认为最容易被忽略的一件。
@@ -2151,12 +2151,12 @@ average rate: 0.745
 
     <item>
       <title>为什么我还在手写笔记</title>
-      <link>https://margin.pages.dev/posts/handwriting-notes.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/handwriting-notes.html</guid>
+      <link>https://blog.djdj45.top/posts/handwriting-notes.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/handwriting-notes.html</guid>
       <pubDate>Sun, 28 Jun 2026 00:00:00 +0800</pubDate>
       <category>随笔</category>
       <description>电子设备记了三年，最后还是回到纸和笔。原因和记忆力无关，和速度有关。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/handwriting-notes.html">为什么我还在手写笔记</a> · 2026.06.28</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/handwriting-notes.html">为什么我还在手写笔记</a> · 2026.06.28</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">先澄清一件事：我不反对电子笔记。我用过 Notion、Obsidian、各种 Markdown 编辑器，
@@ -2243,12 +2243,12 @@ average rate: 0.745
 
     <item>
       <title>两个输入，一个状态机</title>
-      <link>https://margin.pages.dev/posts/rotary-encoder-ui.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/rotary-encoder-ui.html</guid>
+      <link>https://blog.djdj45.top/posts/rotary-encoder-ui.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/rotary-encoder-ui.html</guid>
       <pubDate>Thu, 28 May 2026 00:00:00 +0800</pubDate>
       <category>设计</category>
       <description>连续量用于调整，离散量用于切换——以及验收标准为什么值得写两条。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/rotary-encoder-ui.html">两个输入，一个状态机</a> · 2026.05.28</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/rotary-encoder-ui.html">两个输入，一个状态机</a> · 2026.05.28</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">我手上这台设备的全部输入，只有一个旋转编码器：能左转、能右转、能按下去。
@@ -2430,12 +2430,12 @@ average rate: 0.745
 
     <item>
       <title>我改了那个函数，但跑的不是它</title>
-      <link>https://margin.pages.dev/posts/duplicate-handler.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/duplicate-handler.html</guid>
+      <link>https://blog.djdj45.top/posts/duplicate-handler.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/duplicate-handler.html</guid>
       <pubDate>Mon, 22 Sep 2025 00:00:00 +0800</pubDate>
       <category>调试</category>
       <description>用三组对照排除两个方向，然后撞上有两个实现的 onAtmosphericDataReceived。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/duplicate-handler.html">我改了那个函数，但跑的不是它</a> · 2025.09.22</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/duplicate-handler.html">我改了那个函数，但跑的不是它</a> · 2025.09.22</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">同一台真实设备、同一路数据，在两个页面上表现完全不同：</p>
@@ -2585,12 +2585,12 @@ console.trace('onAtmosphericDataReceived called');
 
     <item>
       <title>一次好得可疑的拟合</title>
-      <link>https://margin.pages.dev/posts/suspicious-fit.html</link>
-      <guid isPermaLink="true">https://margin.pages.dev/posts/suspicious-fit.html</guid>
+      <link>https://blog.djdj45.top/posts/suspicious-fit.html</link>
+      <guid isPermaLink="true">https://blog.djdj45.top/posts/suspicious-fit.html</guid>
       <pubDate>Mon, 08 Sep 2025 00:00:00 +0800</pubDate>
       <category>数据</category>
       <description>十二个点、残差 0.6 毫米，以及为什么「拟合得太好」是个危险信号。</description>
-      <content:encoded><![CDATA[<p><em><a href="https://margin.pages.dev/posts/suspicious-fit.html">一次好得可疑的拟合</a> · 2025.09.08</em></p>
+      <content:encoded><![CDATA[<p><em><a href="https://blog.djdj45.top/posts/suspicious-fit.html">一次好得可疑的拟合</a> · 2025.09.08</em></p>
 <div class="wrap article-body">
   <div class="prose">
     <p class="first">我需要一个数字：车辆的转弯半径。指标里写着它，验收时要交它，

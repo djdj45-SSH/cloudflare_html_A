@@ -11,11 +11,11 @@ compatibility_date = "2025-09-01"
 [[d1_databases]]
 binding = "DB"                                  # 代码里用 env.DB 访问
 database_name = "margin_comments"
-database_id = "执行 wrangler d1 create margin_comments 后会得到这个 id"
+database_id = "3c7e1ad3-9df5-4c26-8b8c-2af9919166b8"
 
 [vars]
 # 允许哪些来源跨域调用。上线后建议改成你自己的域名，缩小暴露面。
-ALLOWED_ORIGIN = "https://margin.pages.dev"
+ALLOWED_ORIGIN = "https://blog.djdj45.top"
 
 # OWNER_KEY 不要写在这里——用 secret 保存：
 #   wrangler secret put OWNER_KEY

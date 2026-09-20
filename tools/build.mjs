@@ -15,6 +15,8 @@
      3. 按年份分组 → 归档列表（写入 archive.html 锚点区）
      4. 生成 feed.xml 与 sitemap.xml
      5. 把 templates/nav.html、footer.html 注入所有页面的锚点区
+     6. 把每个页面 head 里的 canonical / og:url 归到 site.url 名下
+        （手写外壳如 index/archive/changelog 的 head 不在锚点内，否则换域名会留死链）
 
    单一数据源：tools/posts.json（文章元数据）
    手改锚点内的内容是没用的——下次 build 会覆盖掉。
@@ -187,6 +189,23 @@ const fill = (html, name, content) => {
   return html.slice(0, i + open.length) + '\n' + content + '\n' + html.slice(j);
 };
 
+/* <head> 里的绝对地址统一归到 site.url 名下。
+   为什么需要它：index / archive / changelog / tags/index 这几个页面是「手写外壳」，
+   只有 build 锚点区会被重写，head 不在锚点内——所以光改 site.url 并不会动到它们的
+   canonical 与 og:url，会留下指向旧域名的死链（对 SEO 是负分）。
+   这里只替换 origin、保留路径，因此文章页/标签页（路径各不相同）也适用且结果不变（幂等）。 */
+const rebaseHead = (html) => {
+  const base = String(site.url || '').replace(/\/+$/, '');
+  if (!base) return html;
+  const swap = (full, pre, url, post) => {
+    const path = url.replace(/^https?:\/\/[^/]*/i, '') || '/';
+    return `${pre}${base}${path}${post}`;
+  };
+  return html
+    .replace(/(<link\s+rel="canonical"\s+href=")([^"]*)(")/gi, swap)
+    .replace(/(<meta\s+property="og:url"\s+content=")([^"]*)(")/gi, swap);
+};
+
 /* 注入导航与页脚。幂等：锚点之间整体替换，重复运行结果不变。 */
 const injectChrome = (html, current) => {
   const navVars = {
@@ -196,7 +215,7 @@ const injectChrome = (html, current) => {
   };
   if (current) navVars[current] = ' aria-current="page"';
 
-  let out = html;
+  let out = rebaseHead(html);
   const a = fill(out, 'nav', render(tpl('nav.html'), navVars).replace(/\s+$/, ''));
   if (a) out = a;
   const b = fill(out, 'footer', render(tpl('footer.html'), {

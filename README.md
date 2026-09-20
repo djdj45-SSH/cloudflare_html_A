@@ -74,17 +74,21 @@ cloudflare_html_A/
 4. 保存后等待部署，Pages 会给一个 `xxx.pages.dev` 域名。绑定自定义域名在
    Custom domains 里添加，DNS 会自动配好。
 
-## 二、上线前必须替换的占位内容
+## 二、域名与尚未替换的占位内容
 
-域名现在集中管理：改 `tools/posts.json` 里的 `site` 一处，重新构建即可覆盖
-所有文章页、首页、归档、RSS 和站点地图。
+域名集中管理在 `tools/posts.json` 的 `site` 一处，重新构建即可覆盖所有页面。
+**当前站点地址：`https://blog.djdj45.top`**（Cloudflare Pages + 自定义域名）。
 
-| 位置 | 字段 / 值 | 说明 |
+| 位置 | 当前值 | 说明 |
 |---|---|---|
-| `tools/posts.json` → `site.url` | `https://margin.pages.dev` | 一处改全站，改完必须重新构建 |
-| `tools/posts.json` → `site.email` | `hello@example.com` | 页脚显示 |
-| `robots.txt` | `Sitemap:` 那一行 | 手写文件，需手动改 |
-| `about.html` / `404.html` | `canonical` 链接 | 手写文件，需手动改 |
+| `tools/posts.json` → `site.url` | `https://blog.djdj45.top` | 一处改全站，改完必须重新构建 |
+| `tools/posts.json` → `site.commentsApi` | 留言板 Worker 地址 | 见下面「留言板」一节 |
+| `tools/posts.json` → `site.email` | ⚠️ 仍是 `hello@example.com` | 页脚显示，**上线前应换成真实邮箱** |
+| `robots.txt` | `Sitemap:` 那一行 | 手写文件，**换域名要手动改** |
+
+> 除了 `robots.txt`，其余页面的 `<head>` 绝对地址（`canonical` / `og:url`）都由构建脚本
+> 按 `site.url` 自动校正——包括 `index.html`、`archive.html`、`changelog.html`、
+> `tags/index.html` 这几个手写外壳。所以换域名只需改 `site.url` 再 `node tools/build.mjs`。
 
 ```bash
 # 改完 site.url 之后
@@ -189,19 +193,21 @@ node tools/build.mjs
 | **更新记录** `/changelog.html` | 自动抽取每篇文章末尾 `<dl class="revision">` 里的每一条 dt/dd，按日期倒序汇总 |
 | **RSS 全文输出** | `description` 放摘要，`content:encoded` 放正文（CDATA 包裹），站内链接自动转绝对地址 |
 | **留言板** | 文章页底部，前端在 `assets/js/comments.js`，后端在 `worker/`，见 `worker/README.md` |
+| **head 绝对地址** | `canonical` / `og:url` 自动归到 `site.url` 名下，手写外壳页也覆盖（只换 origin、保留路径） |
 
 想让相关文章更准，就把标签打得更细一点；想让它彻底不出现，把 `HAS_RELATED` 那个判断去掉即可。
 
 ### 留言板
 
-完全匿名、不需要登录、不引入第三方脚本。**上线前必须先把后端部署好**，
-否则文章页底部会显示一行「功能还没接上后端」的提示：
+完全匿名、不需要登录、不引入第三方脚本。**后端已经部署好了**：
 
-```bash
-cd worker   # 按 worker/README.md 走一遍：建库 → 建表 → 设密钥 → 部署
-```
+- Worker：`https://margin-comments.3554749491.workers.dev`（名字 `margin-comments`）
+- D1 数据库：`margin_comments`（id `3c7e1ad3-9df5-4c26-8b8c-2af9919166b8`，区域 WNAM）
+- 表 `comments` + 两个索引已建好；`OWNER_KEY` / `IP_SALT` 以 secret 形式保存
 
-部署完把 Worker 地址填进 `tools/posts.json` 的 `site.commentsApi`，重新构建即可。
+想重新部署或换库，按 `worker/README.md` 走一遍：建库 → 建表 → 设密钥 → `wrangler deploy`，
+然后把 Worker 地址填回 `tools/posts.json` 的 `site.commentsApi`，重新构建即可。
+`commentsApi` 留空时，文章页底部会显示一行「功能还没接上后端」的提示，不会报错。
 
 站长用法：打开任意文章页，地址后加 `?ownerKey=你的密钥`（只需一次，会记进浏览器），
 之后就能删除留言、以及带「站长」徽章发言。
