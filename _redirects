@@ -9,5 +9,26 @@
 /about/             /about.html 301
 /archive/           /archive.html 301
 
+# --- 反爬 trap 页改写（形态二：走 404 状态码）---------------------------
+# 路径本身不存在，靠 Cloudflare 边缘的重定向规则把命中身份的请求 302 到这里，
+# 再由这里改写成对应的静态 trap 页。
+# traps/ 由 tools/build-traps.mjs 生成；规则清单见 tools/traps.rules.md
+#
+# 注意：非 3xx 的改写能力官方特性表标为「不支持」，所以这一段属于实验。
+#       稳妥做法是让 Redirect 规则直接指向 /traps/trap-*.html（形态一）。
+
+/blocked/python-requests   /traps/trap-python.html      404
+/blocked/httpx             /traps/trap-httpx.html       404
+/blocked/aiohttp           /traps/trap-aiohttp.html     404
+/blocked/scrapy            /traps/trap-scrapy.html      404
+/blocked/curl              /traps/trap-shell.html       404
+/blocked/wget              /traps/trap-shell.html       404
+/blocked/go                /traps/trap-golang.html      404
+/blocked/okhttp            /traps/trap-java.html        404
+/blocked/java              /traps/trap-java.html        404
+/blocked/node              /traps/trap-node.html        404
+/blocked/*                 /traps/trap-generic.html     404
+
 # 兜底：未匹配的路径交给 404.html（Pages 会自动使用它，这里只是显式声明）
+# 必须留在最后，否则会吃掉上面所有规则
 /*                  /404.html   404

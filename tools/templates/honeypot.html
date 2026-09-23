@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  余量 MARGIN — 蜜罐页模板
+  ------------------------------------------------------------------
+  这一页不"拒绝"爬虫，而是骗它：结构完全正确、字段整齐、日期合理，
+  但每一条数据都是假的。
+
+  教学价值：这是全项目唯一"爬到了、但数据是错的"场景。
+  它逼着爬虫作者去写校验（时间范围、正文长度分布、重复率、
+  链接可达性），而不是拿到 JSON 就开心入库。
+
+  由 tools/build-traps.mjs 渲染成 traps/honeypot.html。
+  占位符（双花括号包裹）：CLIENT / GENERATED / COUNT / ENTRIES
+  ⚠️ 不要在本文件里直接写出带花括号的占位符名 —— 那会被 replaceAll 一并替换，
+     把内容灌进注释。生成器有残留检查，写错了会直接报错。
+
+  注意：条目内容是程序生成的假数据，标题刻意荒诞但格式合规 ——
+  目的是让"格式对、内容假"这个对比足够刺眼。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>归档 — 余量 MARGIN</title>
+<style>
+  :root{
+    --bg:#070808; --panel:#0d0f0e; --line:#1c211f;
+    --text:#e6ece8; --mute:#7d8a84; --phos:#5EE39B; --amber:#FFB65C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text); padding:48px 24px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:8px}
+  .brand{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+  .brand b{color:var(--phos);font-weight:600}
+  h1{font-size:26px;font-weight:600;margin:14px 0 6px}
+  .meta{font-size:12px;color:var(--mute);letter-spacing:.04em}
+  ul{list-style:none}
+  li{border-bottom:1px solid var(--line);padding:16px 0}
+  li a{color:var(--text);text-decoration:none;font-size:15px;font-weight:600}
+  li a:hover{color:var(--phos)}
+  .sub{font-size:12.5px;color:var(--mute);line-height:1.75;margin-top:6px}
+  .tags{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+  .tag{font-size:10.5px;letter-spacing:.08em;color:var(--mute);border:1px solid var(--line);padding:2px 7px}
+  footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--mute);line-height:1.9}
+  footer a{color:var(--phos);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">余量 <b>MARGIN</b></div>
+    <h1>归档</h1>
+    <div class="meta">{{COUNT}} 篇文章 · 生成于 {{GENERATED}}</div>
+  </header>
+
+  <ul>
+{{ENTRIES}}
+  </ul>
+
+  <footer>
+    共 {{COUNT}} 篇。抓取许可与联系方式见 <a href="/robots.txt">/robots.txt</a>。<br>
+    检测到客户端：{{CLIENT}}
+  </footer>
+
+</div>
+</body>
+</html>

@@ -10,16 +10,26 @@
 #
 # 临时跳过（不推荐）：git commit --no-verify
 
-node tools/build.mjs --check
-status=$?
+fail=0
 
-if [ $status -ne 0 ]; then
+echo "[pre-commit] 校验内容产物（build.mjs）…"
+node tools/build.mjs --check
+[ $? -ne 0 ] && fail=1
+
+echo "[pre-commit] 校验反爬产物（build-traps.mjs）…"
+node tools/build-traps.mjs --check
+[ $? -ne 0 ] && fail=1
+
+if [ $fail -ne 0 ]; then
   echo ""
   echo "──────────────────────────────────────────────"
   echo " 提交被阻止：上面的文件与 tools/ 下的源不一致。"
-  echo " 修复方式：node tools/build.mjs"
+  echo " 修复方式："
+  echo "   node tools/build.mjs"
+  echo "   node tools/build-traps.mjs"
   echo "──────────────────────────────────────────────"
   exit 1
 fi
 
+echo "[pre-commit] 全部一致。"
 exit 0

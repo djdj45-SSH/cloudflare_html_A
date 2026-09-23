@@ -12,8 +12,10 @@ cloudflare_html_A/
 │   ├── posts.json             所有文章的元数据（唯一数据源）
 │   ├── content/               正文片段，一个文件一篇
 │   ├── covers/                首页头条用的内联 SVG 插图（可选）
-│   ├── templates/             页面骨架与片段模板
+│   ├── templates/             页面骨架与片段模板（trap.html / honeypot.html 也在这里）
 │   ├── build.mjs              构建脚本（node tools/build.mjs）
+│   ├── build-traps.mjs        反爬 trap 页构建脚本（node tools/build-traps.mjs）
+│   ├── traps.rules.md         反爬规则清单：与 Cloudflare 的对应关系、验证命令、踩过的坑
 │   └── pre-commit.sample      git 钩子示例：防止忘了跑构建
 │
 ├── worker/                    ← 留言板后端
@@ -33,6 +35,7 @@ cloudflare_html_A/
 ├── about.html                 （about / 404 是手写的，只注入 nav 和 footer）
 ├── 404.html
 ├── posts/                     文章页（全部由 content/ 生成）
+├── traps/                     反爬 trap 页 + 蜜罐页（由 tools/build-traps.mjs 生成，勿手改）
 ├── assets/
 │   ├── css/site.css           设计令牌 + 全部样式（含明室/暗房双主题）
 │   ├── js/site.js             主题 / 示波器 / 目录 / 搜索 / 复制 / 抽屉
@@ -278,7 +281,9 @@ chmod +x .git/hooks/pre-commit
 
 - **`_headers`**：给 `/assets/*` 加一年强缓存，`/*.html` 不缓存（改完立刻生效）。
   格式要求：路径一行，下面的头字段必须缩进，否则 Cloudflare 会静默忽略。
-- **`_redirects`**：`/rss`、`/feed` 指向 `feed.xml`；末尾 `/* /404.html 404` 兜底。
+- **`_redirects`**：`/rss`、`/feed` 指向 `feed.xml`；`/blocked/*` 是反爬 trap 页的改写
+  （见「九、反爬：trap 页与边缘规则」）；末尾 `/* /404.html 404` 兜底，**必须留在最后**，
+  否则会吃掉上面所有规则。
 - **`404.html`**：Pages 会自动识别并使用，无须额外配置。
 - 这两个文件必须放在**构建输出目录的根目录**（本项目就是仓库根目录）。
 
@@ -315,3 +320,64 @@ chmod +x .git/hooks/pre-commit
 python -m http.server 8080
 # 打开 http://localhost:8080
 ```
+
+## 九、反爬：trap 页与边缘规则
+
+站点对**未声明身份的自动化客户端**有一层识别。它**不在 Pages 里跑**，而在 Cloudflare 边缘：
+
+| 环节 | 在哪 | 消耗 Pages Functions 配额 |
+|---|---|---|
+| 识别 + 改道 | Cloudflare 重定向规则（控制台，zone 级） | **否** |
+| 返回的页面 | `traps/trap-*.html`（静态文件） | 否 |
+
+命中后请求被 302 到对应的 trap 页，例如 `python-requests/2.31.0` → `/traps/trap-python.html`，
+页面上直接写着"认出你了：python-requests"。**整个过程源站不做任何工作。**
+
+为什么不用中间件：Pages Functions 免费额度是 **10 万请求/天**，而且与**留言板 `/api` 共用同一个池**。
+用 `functions/_middleware.js` 做拦截，爬虫洪流会先把留言板打挂（配额耗尽 → 默认 fail open →
+Function 被绕过 → `/api` 退化成静态查找返回 404）。边缘重定向不消耗任何配额，请求量也无上限。
+
+### 维护方法
+
+```bash
+node tools/build-traps.mjs          # 生成 traps/
+node tools/build-traps.mjs --check  # 校验（已挂进 pre-commit 示例）
+```
+
+- 客户端清单：`tools/build-traps.mjs` 顶部的 `CLIENTS` 数组（唯一数据源）
+- 页面样式：`tools/templates/trap.html`、`tools/templates/honeypot.html`
+- **与 Cloudflare 规则的对应关系、验证命令、踩过的坑：`tools/traps.rules.md`** ← 加规则前先看这个
+
+### 加规则时必读的坑
+
+规则表达式**必须带排除条件**，否则无限重定向（跳转后 UA 没变，会再次命中）：
+
+```
+(http.user_agent contains "<match>")
+and not starts_with(http.request.uri.path, "/traps/")
+and not starts_with(http.request.uri.path, "/blocked/")
+```
+
+验证：`curl -w "%{num_redirects}"` 必须是 `1`。
+
+### 放行规则
+
+本站欢迎爬虫，条件是它**说明自己是谁**：请求头带标识与联系方式的客户端不会被改道。
+本站自己的教学爬虫用 `DojoBot/1.0 (+https://blog.djdj45.top/about.html)`。
+
+### 蜜罐（已生成，未接入）
+
+`traps/honeypot.html` 返回一个**结构完全正确**的归档页 + **14 条假文章**：日期、标签、摘要格式
+全部合规，但每一条都是生成的。它不"拒绝"爬虫，它骗爬虫。
+
+教学价值在于：这是唯一"抓到了、但数据是错的"场景，逼着抓取方去写校验（时间范围、正文长度分布、
+重复率、链接可达性 —— 注意假条目的 `/posts/no-*.html` 链接**全是死的**，这就是一个可用的破绽）。
+
+启用方式见 `tools/traps.rules.md`（改一条重定向规则的目标即可，代价为零）。
+
+### 别手改 `traps/`
+
+`traps/` 下全是生成物，下次 `build-traps.mjs` 会覆盖。要改内容改 `tools/templates/`。
+
+> ⚠️ 模板里**不要直接写出带花括号的占位符名**（连注释里也不行）—— `replaceAll` 会把内容
+> 一并灌进注释。生成器有残留占位符检查，写错了会直接报错并退出。

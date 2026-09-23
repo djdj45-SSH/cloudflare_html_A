@@ -1,4 +1,15 @@
 User-agent: *
 Allow: /
 
+# 反爬 trap 页：只对未声明身份的自动化客户端返回，不应被抓取或索引。
+# 识别与改道发生在 Cloudflare 边缘（302 重定向），不占用 Pages Functions 配额，
+# 与留言板 /api 的 10 万/天配额互不影响。说明见 tools/traps.rules.md
+Disallow: /traps/
+Disallow: /blocked/
+
+# 本站欢迎爬虫，条件是它肯说明自己是谁。
+# 请求头里带标识与联系方式的客户端不会被识别层改道，格式建议：
+#   YourBot/1.0 (+https://example.com/bot)
+# 本站自己的教学爬虫用 DojoBot/1.0。
+
 Sitemap: https://blog.djdj45.top/sitemap.xml
