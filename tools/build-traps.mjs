@@ -18,10 +18,11 @@
      改动的理由、频率、审阅者都不同（改这里等于改安全策略）。
      分成两个脚本，git 历史上一眼能看出"哪次提交动了防护"。
 
-   为什么不引用 /assets/css/site.css：
-     trap 页必须完全自包含。它可能在上游不可用、缓存穿透、断网等任何时刻
-     被返回，引用站内资源会让它退化成半张白页 —— 那就不像"一个有意的拦截"，
-     而像"一个坏掉的站"。样式全部内联在模板里。
+   样式为什么不内联在每个页面里：
+     10 个 trap 页的 CSS 完全一样，内联会变成"改一处配色要动 10 个文件"，
+     而且 traps/ 是生成物、手改还会被覆盖。所以抽到 assets/css/trap.css，
+     同源共享一份；模板里只留极小一段兜底样式，样式表不可达时页面仍可读。
+     trap 页的真正读者是自动化客户端，它们看到的本来就是纯 HTML。
 
    与 Cloudflare 侧的对应关系：
      每条 CLIENTS 条目对应控制台里一条 Redirect 规则，
@@ -129,16 +130,21 @@ function fakeEntries(count, seed = 0x4d415247) {
 const esc = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/* 渲染 + 防呆。
-   模板里若还有未替换的占位符就直接报错 —— 最常见的原因是在**注释**里
-   写出了带花括号的占位符名，结果 replaceAll 把内容灌进了注释（踩过一次，
-   表现为蜜罐页条目数莫名其妙翻倍）。 */
+/* 渲染 + 三重防呆。
+   1) 模板必须**含有**该占位符 —— 否则是拼错了名字，会静默产出错页面；
+   2) 替换后不得**残留**任何占位符 —— 最常见的原因是在注释里写出了带花括号的
+      占位符名，replaceAll 把内容灌进了注释（踩过一次，表现为蜜罐条目数翻倍）；
+   3) 缺 key 时 Object.entries 不会报错，所以第 1 条必须查模板原文而不是渲染结果。 */
 const PLACEHOLDER = /\{\{[A-Z_]+\}\}/;
 function render(tpl, map, label) {
   let html = tpl;
-  for (const [k, v] of Object.entries(map)) html = html.replaceAll(`{{${k}}}`, v);
+  for (const [k, v] of Object.entries(map)) {
+    const token = `{{${k}}}`;
+    if (!tpl.includes(token)) die(`${label}：模板中找不到占位符 ${token}`);
+    html = html.replaceAll(token, v);
+  }
   const left = html.match(PLACEHOLDER);
-  if (left) die(`${label}：模板中仍残留未替换的占位符 ${left[0]}`);
+  if (left) die(`${label}：渲染后仍残留未替换的占位符 ${left[0]}`);
   return html;
 }
 
@@ -172,7 +178,6 @@ for (const c of CLIENTS) {
         CLIENT_ID: c.id,
         MATCH: c.match,
         KIND: c.kind,
-        DETECTED: 'IDENTIFIED',
       },
       `trap-${c.id}`
     )

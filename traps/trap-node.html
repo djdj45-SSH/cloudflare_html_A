@@ -1,20 +1,17 @@
 <!DOCTYPE html>
 <!--
-  余量 MARGIN — 反爬 trap 页模板
+  余量 MARGIN — 反爬 trap 页模板（身份页）
   ------------------------------------------------------------------
   由 tools/build-traps.mjs 渲染成 traps/trap-*.html。
-  占位符（双花括号包裹）：CLIENT / CLIENT_ID / MATCH / KIND / DETECTED
-  ⚠️ 不要在本文件里直接写出带花括号的占位符名 —— 那会被 replaceAll 一并替换，
-     把内容灌进注释。生成器有残留检查，写错了会直接报错。
-  不要手改 traps/ 下的产物 —— 下次 build-traps 会覆盖。
+  占位符（下面正文里出现的双写花括号名）：
+    CLIENT / CLIENT_ID / MATCH / KIND
 
-  设计约束（重要，改动前先读）：
-   1. 完全自包含：无外部 CSS / JS / 字体请求。
-      这一页可能在任何时刻被返回，包括 CDN 缓存穿透、上游不可用的时候，
-      引用 /assets/* 会让它退化成半张白页。
-   2. 唯一的事实陈述必须准确 —— 就是这个身份被认出来了。
-      不暴露规则表达式、不暴露源站、不承诺恢复时间。
-   3. 状态码由 Redirect 规则决定（302 → 本页 200），不在这里声明。
+  ⚠️ 本文件的注释里不要写出带花括号的占位符名 —— replaceAll 会一并替换，
+     把内容灌进注释。生成器会检查"模板是否含占位符"和"渲染后是否还有残留"。
+
+  样式在 assets/css/trap.css（同源共享，10 个页面一份）。
+  下面那段 style 是极小兜底：样式表不可达时页面仍可读 ——
+  文案全在 HTML 里，样式只影响观感，不影响"拦截意图"的表达。
 -->
 <html lang="zh-CN">
 <head>
@@ -22,79 +19,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>已识别 · node-fetch — 余量 MARGIN</title>
-<style>
-  :root{
-    --bg:#070808; --panel:#0d0f0e; --line:#1c211f;
-    --text:#e6ece8; --mute:#7d8a84;
-    --phos:#5EE39B; --amber:#FFB65C;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{
-    min-height:100vh; background:var(--bg); color:var(--text);
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-    display:flex; align-items:center; justify-content:center; padding:24px;
-    -webkit-font-smoothing:antialiased;
-  }
-  .panel{
-    width:100%; max-width:660px; background:var(--panel);
-    border:1px solid var(--line); position:relative; padding:40px 36px 32px;
-  }
-  .panel::before,.panel::after{
-    content:""; position:absolute; width:14px; height:14px;
-    border:1px solid var(--phos); opacity:.55;
-  }
-  .panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
-  .panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
-
-  .hdr{
-    display:flex; align-items:baseline; gap:10px;
-    padding-bottom:14px; margin-bottom:26px; border-bottom:1px solid var(--line);
-    font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute);
-  }
-  .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex:none}
-
-  .code{font-size:64px;line-height:1;font-weight:600;color:var(--amber);letter-spacing:.02em}
-  .code small{font-size:13px;color:var(--mute);letter-spacing:.16em;margin-left:10px}
-
-  h1{margin:22px 0 14px;font-size:20px;font-weight:600;letter-spacing:.01em}
-  h1 em{font-style:normal;color:var(--phos)}
-
-  p{font-size:13.5px;line-height:1.85;color:var(--mute);margin-bottom:12px}
-  p strong{color:var(--text);font-weight:600}
-
-  .readout{margin:24px 0;border:1px solid var(--line);background:#090b0a}
-  .row{
-    display:flex;justify-content:space-between;gap:16px;
-    padding:9px 14px;font-size:12px;border-bottom:1px solid var(--line);
-  }
-  .row:last-child{border-bottom:0}
-  .row span:first-child{color:var(--mute);letter-spacing:.06em}
-  .row span:last-child{color:var(--text);text-align:right;word-break:break-all}
-  .row .warn{color:var(--amber)}
-  .row .ok{color:var(--phos)}
-
-  .howto{border-left:2px solid var(--phos);padding:2px 0 2px 14px;margin:20px 0}
-  .howto code{color:var(--phos);font-size:13px}
-
-  .foot{
-    margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
-    font-size:12px;line-height:1.9;color:var(--mute);
-  }
-  .foot a{color:var(--phos);text-decoration:none;border-bottom:1px solid rgba(94,227,155,.3)}
-  .foot a:hover{border-bottom-color:var(--phos)}
-</style>
+<style>body{background:#070808;color:#e6ece8;margin:0;padding:24px;font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.8}a{color:#5EE39B}</style>
+<link rel="stylesheet" href="/assets/css/trap.css">
 </head>
-<body>
+<body class="is-trap" data-client-id="node">
 <main class="panel">
 
   <div class="hdr"><span class="dot"></span><span>余量 / MARGIN — 访问控制</span></div>
 
-  <div class="code">IDENTIFIED<small>IDENTIFIED</small></div>
+  <div class="code">已识别<small>IDENTIFIED</small></div>
 
   <h1>认出你了：<em>node-fetch</em></h1>
 
   <p>
-    这个请求被本站的自动化识别层拦下，因为它带着 <strong>node-fetch</strong> 的默认身份。
+    这个请求被本站的自动化识别层拦下，因为它带着 <strong>node-fetch</strong> 的默认标识。
     你拿到的不是页面 —— 请求在边缘就被改道了，源站没有为你做任何工作。
   </p>
 
@@ -103,7 +41,7 @@
     <div class="row"><span>MATCHED ON</span><span>node-fetch</span></div>
     <div class="row"><span>DECISION</span><span>REDIRECT → TRAP</span></div>
     <div class="row"><span>SCOPE</span><span>node · 请求库</span></div>
-    <div class="row"><span>POLICY</span><span><a href="/robots.txt" style="color:var(--phos);text-decoration:none">/robots.txt</a></span></div>
+    <div class="row"><span>POLICY</span><span><a href="/robots.txt">/robots.txt</a></span></div>
   </div>
 
   <p>
@@ -116,7 +54,7 @@
   </div>
 
   <p>
-    本站的做法写在 <strong>爬虫与反爬：一个自攻自守的靶场</strong> 一文里 ——
+    本站的做法写在《爬虫与反爬：一个自攻自守的靶场》一文里 ——
     规则怎么配、为什么放在边缘、代价是什么，都公开。
   </p>
 

@@ -1,0 +1,109 @@
+/* ==========================================================================
+   余量 MARGIN — 反爬 trap 页共享样式
+   --------------------------------------------------------------------------
+   被 traps/trap-*.html 与 traps/honeypot.html 引用（同源，无需 CDN）。
+   抽出来的理由很实在：10 个页面本来各自内联同一份 CSS，
+   改一处配色要动 10 个文件 —— 而且它们是生成物，手改还会被覆盖。
+
+   设计语言与站点一致：仪器面板 / 磷光绿 / 琥珀告警。
+   变量与 assets/css/site.css 里的同名，方便对照。
+
+   降级说明：若本文件不可达，页面会退化成无样式但**可读**的文档 ——
+   所有文案都在 HTML 里，样式只影响观感，不影响"拦截意图"的表达。
+   这是有意接受的取舍：trap 页的读者是自动化客户端，看到的本来就是纯 HTML。
+   ========================================================================== */
+
+:root{
+  --bg:#070808; --panel:#0d0f0e; --line:#1c211f;
+  --text:#e6ece8; --mute:#7d8a84;
+  --phos:#5EE39B; --amber:#FFB65C;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  background:var(--bg); color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  -webkit-font-smoothing:antialiased;
+}
+
+a{color:var(--phos);text-decoration:none}
+
+/* ---------------------------------------------------------------- 身份页 */
+
+body.is-trap{
+  min-height:100vh;
+  display:flex; align-items:center; justify-content:center;
+  padding:24px;
+}
+
+.panel{
+  width:100%; max-width:660px; background:var(--panel);
+  border:1px solid var(--line); position:relative; padding:40px 36px 32px;
+}
+/* 仪器面板四角标记 */
+.panel::before,.panel::after{
+  content:""; position:absolute; width:14px; height:14px;
+  border:1px solid var(--phos); opacity:.55;
+}
+.panel::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+.panel::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+
+.hdr{
+  display:flex; align-items:baseline; gap:10px;
+  padding-bottom:14px; margin-bottom:26px; border-bottom:1px solid var(--line);
+  font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--mute);
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex:none}
+
+.code{font-size:64px;line-height:1;font-weight:600;color:var(--amber);letter-spacing:.02em}
+.code small{font-size:13px;color:var(--mute);letter-spacing:.16em;margin-left:10px}
+
+.panel h1{margin:22px 0 14px;font-size:20px;font-weight:600;letter-spacing:.01em}
+.panel h1 em{font-style:normal;color:var(--phos)}
+
+.panel p{font-size:13.5px;line-height:1.85;color:var(--mute);margin-bottom:12px}
+.panel p strong{color:var(--text);font-weight:600}
+
+.readout{margin:24px 0;border:1px solid var(--line);background:#090b0a}
+.row{
+  display:flex;justify-content:space-between;gap:16px;
+  padding:9px 14px;font-size:12px;border-bottom:1px solid var(--line);
+}
+.row:last-child{border-bottom:0}
+.row span:first-child{color:var(--mute);letter-spacing:.06em}
+.row span:last-child{color:var(--text);text-align:right;word-break:break-all}
+.row .warn{color:var(--amber)}
+
+.howto{border-left:2px solid var(--phos);padding:2px 0 2px 14px;margin:20px 0}
+.howto code{color:var(--phos);font-size:13px}
+
+.foot{
+  margin-top:26px;padding-top:18px;border-top:1px solid var(--line);
+  font-size:12px;line-height:1.9;color:var(--mute);
+}
+.foot a{border-bottom:1px solid rgba(94,227,155,.3)}
+.foot a:hover{border-bottom-color:var(--phos)}
+
+/* ---------------------------------------------------------------- 蜜罐页 */
+
+body.is-honeypot{padding:48px 24px}
+.wrap{max-width:760px;margin:0 auto}
+.wrap header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:8px}
+.brand{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+.brand b{color:var(--phos);font-weight:600}
+.wrap h1{font-size:26px;font-weight:600;margin:14px 0 6px}
+.meta{font-size:12px;color:var(--mute);letter-spacing:.04em}
+
+.wrap ul{list-style:none}
+.wrap li{border-bottom:1px solid var(--line);padding:16px 0}
+.wrap li a{color:var(--text);font-size:15px;font-weight:600}
+.wrap li a:hover{color:var(--phos)}
+.sub{font-size:12.5px;color:var(--mute);line-height:1.75;margin-top:6px}
+.tags{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.tag{font-size:10.5px;letter-spacing:.08em;color:var(--mute);border:1px solid var(--line);padding:2px 7px}
+
+.wrap footer{
+  margin-top:28px;padding-top:16px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--mute);line-height:1.9;
+}
