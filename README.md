@@ -81,16 +81,18 @@ cloudflare_html_A/
 4. 保存后等待部署，Pages 会给一个 `xxx.pages.dev` 域名。绑定自定义域名在
    Custom domains 里添加，DNS 会自动配好。
 
-## 二、域名与尚未替换的占位内容
+## 二、域名与站点级配置
 
 域名集中管理在 `tools/posts.json` 的 `site` 一处，重新构建即可覆盖所有页面。
 **当前站点地址：`https://blog.djdj45.top`**（Cloudflare Pages + 自定义域名）。
+占位内容已经全部替换完毕，下面这张表是唯一的配置入口：
 
 | 位置 | 当前值 | 说明 |
 |---|---|---|
 | `tools/posts.json` → `site.url` | `https://blog.djdj45.top` | 一处改全站，改完必须重新构建 |
-| `tools/posts.json` → `site.commentsApi` | 留言板 Worker 地址 | 见下面「留言板」一节 |
-| `tools/posts.json` → `site.email` | ⚠️ 仍是 `hello@example.com` | 页脚显示，**上线前应换成真实邮箱** |
+| `tools/posts.json` → `site.commentsApi` | `/api`（相对路径，同源） | 主入口是 Pages Function，见下面「留言板」一节 |
+| `tools/posts.json` → `site.email` | `djdj45_2025@outlook.com` | 页脚、404 页与 feed 的 `managingEditor` 都由它出 |
+| `tools/posts.json` → `site.tagline` / `taglineLong` | 站点定位一句话 | 页脚与 RSS 描述；改这里不要改模板 |
 | `robots.txt` | `Sitemap:` 那一行 | 手写文件，**换域名要手动改** |
 
 > 除了 `robots.txt`，其余页面的 `<head>` 绝对地址（`canonical` / `og:url`）都由构建脚本
