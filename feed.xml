@@ -3,7 +3,7 @@
   <channel>
     <title>余量 MARGIN</title>
     <link>https://blog.djdj45.top/</link>
-    <description>一个嵌入式工程师的调试笔记：ESP32、micro-ROS、传感器与工作台。记录失败、数据，以及被推翻过的结论。</description>
+    <description>一个偏前端的开发笔记：前端与后端、AI 开发，以及作为兴趣的嵌入式。记录失败、数据，和被自己推翻过的结论。</description>
     <language>zh-CN</language>
     <managingEditor>hello@example.com (MARGIN)</managingEditor>
     <lastBuildDate>Sun, 20 Sep 2026 00:00:00 +0800</lastBuildDate>

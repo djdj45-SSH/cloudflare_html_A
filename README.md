@@ -200,6 +200,7 @@ node tools/build.mjs
 | **更新记录** `/changelog.html` | 自动抽取每篇文章末尾 `<dl class="revision">` 里的每一条 dt/dd，按日期倒序汇总 |
 | **RSS 全文输出** | `description` 放摘要，`content:encoded` 放正文（CDATA 包裹），站内链接自动转绝对地址 |
 | **留言板** | 文章页底部，前端 `assets/js/comments.js`，API 走同源 `/api`（`functions/`），逻辑在 `worker/comments-core.js` |
+| **首页「三个方向」** | 数据源 `posts.json` 的 `pillars` 数组；篇数是「标签命中任一即算」，标签链接只给真的有文章的标签（`backend` / `ai` 这类先留空，有文章了自动出现） |
 | **head 绝对地址** | `canonical` / `og:url` 自动归到 `site.url` 名下，手写外壳页也覆盖（只换 origin、保留路径） |
 
 想让相关文章更准，就把标签打得更细一点；想让它彻底不出现，把 `HAS_RELATED` 那个判断去掉即可。
@@ -267,6 +268,9 @@ chmod +x .git/hooks/pre-commit
 | 导航栏、抽屉、页脚 | `tools/templates/nav.html`、`footer.html`（改一次全站生效） |
 | 文章页结构（byline、pager 等） | `tools/templates/post.html` |
 | 首页头条与列表项版式 | `tools/templates/feature.html`、`list-entry.html` |
+| 站点定位（一句标语 / 页脚 / RSS 描述） | `tools/posts.json` 的 `site.tagline`、`site.taglineLong`，页脚在 `templates/footer.html` |
+| 首页「三个方向」板块 | `tools/posts.json` 的 `pillars`，卡片版式在 `templates/pillar.html`、`pillars.html` |
+| 关于页写的方向 | `about.html`（手写文件，正文直接改） |
 | 配色 / 字体 / 动效曲线 | `assets/css/site.css` 顶部 `:root` 与 `[data-theme="day"]` |
 | 首页波形、"掉线"节奏 | `assets/js/site.js` 的 `channels` 数组、`silenceAt()` |
 | 关于页 / 404 文案 | `about.html`、`404.html`（手写文件，正文直接改） |

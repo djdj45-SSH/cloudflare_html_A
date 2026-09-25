@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>余量 MARGIN — 嵌入式调试笔记</title>
-<meta name="description" content="余量 MARGIN：关于 ESP32、micro-ROS、传感器与工作台的调试笔记。记录每一次失败、每一组数据，以及那些最后被证明是错的结论。">
+<title>余量 MARGIN — 前端 · 后端 · AI 开发 · 嵌入式</title>
+<meta name="description" content="余量 MARGIN：一个偏前端的开发笔记，写前端与后端、AI 开发，以及作为兴趣的嵌入式。记录每一次失败、每一组数据，以及那些最后被证明是错的结论。">
 <meta name="author" content="MARGIN">
 <link rel="canonical" href="https://blog.djdj45.top/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="余量 MARGIN">
-<meta property="og:description" content="一个嵌入式工程师的调试笔记：ESP32、micro-ROS、传感器与工作台。">
+<meta property="og:description" content="一个偏前端的开发笔记：前端与后端、AI 开发，以及作为兴趣的嵌入式。">
 <meta property="og:url" content="https://blog.djdj45.top/">
 <meta name="theme-color" content="#070808">
 <meta name="twitter:card" content="summary">
@@ -86,8 +86,8 @@
     <div class="wrap hero__grid">
       <div>
         <h1 class="wordmark">余量<small>Margin · Instrument</small></h1>
-        <p class="hero__lede">写给未来的自己：那些在串口日志里泡了一整天，最后发现问题出在电源上的事。
-          这里记录嵌入式开发里的失败、数据，以及被我自己推翻过的结论。</p>
+        <p class="hero__lede">一个偏前端的开发笔记。前端和后端是我在学的，AI 开发是绕不开的，
+          嵌入式是兴趣——毕竟那些在串口日志里泡了一整天、最后发现问题出在电源上的事，总得有人记下来。</p>
         <div class="hero__cta">
           <a class="btn btn--solid" href="/posts/serial-log-day.html">读最新一篇</a>
           <a class="btn" href="/archive.html">全部归档</a>
@@ -135,6 +135,46 @@
       </div>
 <!-- /build:stats -->
     </div>
+  </section>
+
+  <!-- ===================== 三个方向 ===================== -->
+  <section class="wrap section">
+    <div class="section__head">
+      <div class="section__title"><b>◼</b>这里写什么</div>
+      <div class="section__title">前端 · 后端 / AI 开发 / 嵌入式</div>
+    </div>
+
+    <!-- build:pillars -->
+    <div class="pillars">
+    <div class="pillar panel" data-reveal>
+      <span class="pillar__latin">WEB</span>
+      <h3 class="pillar__title">前端 · 后端</h3>
+      <p class="pillar__desc">浏览器里的界面、数据链路和接口。前端是我花时间最多的方向，后端是接下来要补上的那一半——写到这里的东西多半是排查过程，不是成品。</p>
+      <div class="pillar__meta">
+        <span class="pillar__count">2 篇</span>
+        <div class="pillar__tags"><a class="tag" href="/tags/frontend.html">前端</a><a class="tag" href="/tags/python.html">Python</a><a class="tag" href="/tags/data.html">数据</a></div>
+      </div>
+    </div>
+    <div class="pillar panel" data-reveal>
+      <span class="pillar__latin">AI</span>
+      <h3 class="pillar__title">AI 开发</h3>
+      <p class="pillar__desc">把模型在本地跑起来：量化、显存、推理延迟，以及怎么把它接进自己的工具里。这一路最常见的两堵墙是显存和等待时间。</p>
+      <div class="pillar__meta">
+        <span class="pillar__count">2 篇</span>
+        <div class="pillar__tags"><a class="tag" href="/tags/llm.html">大模型</a><a class="tag" href="/tags/localai.html">本地推理</a></div>
+      </div>
+    </div>
+    <div class="pillar panel" data-reveal>
+      <span class="pillar__latin">EMBEDDED</span>
+      <h3 class="pillar__title">嵌入式</h3>
+      <p class="pillar__desc">ESP32、micro-ROS、传感器与电源。这是我的兴趣所在，所以写得最多——但它是兴趣，不是这个站的全部。</p>
+      <div class="pillar__meta">
+        <span class="pillar__count">9 篇</span>
+        <div class="pillar__tags"><a class="tag" href="/tags/esp32.html">ESP32</a><a class="tag" href="/tags/firmware.html">固件</a><a class="tag" href="/tags/ros2.html">ROS 2</a><a class="tag" href="/tags/micro-ros.html">micro-ROS</a><a class="tag" href="/tags/hardware.html">硬件</a><a class="tag" href="/tags/comm.html">通信</a><a class="tag" href="/tags/env.html">环境</a><a class="tag" href="/tags/android.html">Android</a><a class="tag" href="/tags/design.html">设计</a></div>
+      </div>
+    </div>
+    </div>
+<!-- /build:pillars -->
   </section>
 
   <!-- ===================== 头条 ===================== -->
@@ -270,12 +310,12 @@
   <section class="wrap section">
     <div class="columns">
       <div class="colbox panel" data-reveal>
-        <h3><span class="label label--phos">A</span>常翻的手册</h3>
+        <h3><span class="label label--phos">A</span>常翻的文档</h3>
         <ul>
+          <li><a href="https://developer.mozilla.org/zh-CN/" rel="noopener">MDN Web 文档</a><span>developer.mozilla.org</span></li>
           <li><a href="https://docs.ros.org/en/humble/" rel="noopener">ROS 2 Humble 文档</a><span>docs.ros.org</span></li>
-          <li><a href="https://micro.ros.org/" rel="noopener">micro-ROS</a><span>micro.ros.org</span></li>
           <li><a href="https://docs.espressif.com/projects/esp-idf/en/latest/esp32/" rel="noopener">ESP-IDF 编程指南</a><span>ESP32</span></li>
-          <li><a href="https://www.espressif.com/en/support/download/documents" rel="noopener">Espressif 技术文档</a><span>espressif.com</span></li>
+          <li><a href="https://github.com/ggml-org/llama.cpp" rel="noopener">llama.cpp</a><span>github.com</span></li>
         </ul>
       </div>
 
@@ -299,8 +339,8 @@
     <div class="sitefoot__grid">
       <div>
         <h4>关于这里</h4>
-        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，不做教程，也不保证结论正确。
-          所有数据都来自我能复现的那台机器——型号、固件版本都写在正文里。</p>
+        <p style="font-size:var(--fs-sm);color:var(--text-2);max-width:40ch">余量是一个人的笔记，主要写前端 · 后端 · AI 开发 · 嵌入式——前端是主业，嵌入式是兴趣。
+          不做教程，也不保证结论正确：数据来自我能复现的那台机器，型号和版本都写在正文里。</p>
       </div>
       <div>
         <h4>索引</h4>

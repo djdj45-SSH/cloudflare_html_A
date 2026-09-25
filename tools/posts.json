@@ -4,7 +4,9 @@
     "latin": "MARGIN",
     "url": "https://blog.djdj45.top",
     "email": "hello@example.com",
-    "commentsApi": "/api"
+    "commentsApi": "/api",
+    "tagline": "前端 · 后端 · AI 开发 · 嵌入式",
+    "taglineLong": "一个偏前端的开发笔记：前端与后端、AI 开发，以及作为兴趣的嵌入式。记录失败、数据，和被自己推翻过的结论。"
   },
   "posts": [
     {
@@ -312,7 +314,33 @@
     "hardware": "硬件",
     "design": "设计",
     "frontend": "前端",
+    "backend": "后端",
+    "ai": "AI 开发",
     "essay": "随笔",
     "android": "Android"
-  }
+  },
+  "_pillarsNote": "首页「三个方向」板块的数据源。tags 里只有真正有文章的标签会渲染成链接，没文章的（如 backend）会被自动跳过，等有文章了自动出现。",
+  "pillars": [
+    {
+      "key": "web",
+      "latin": "WEB",
+      "title": "前端 · 后端",
+      "desc": "浏览器里的界面、数据链路和接口。前端是我花时间最多的方向，后端是接下来要补上的那一半——写到这里的东西多半是排查过程，不是成品。",
+      "tags": ["frontend", "backend", "python", "data"]
+    },
+    {
+      "key": "ai",
+      "latin": "AI",
+      "title": "AI 开发",
+      "desc": "把模型在本地跑起来：量化、显存、推理延迟，以及怎么把它接进自己的工具里。这一路最常见的两堵墙是显存和等待时间。",
+      "tags": ["llm", "localai", "ai"]
+    },
+    {
+      "key": "embedded",
+      "latin": "EMBEDDED",
+      "title": "嵌入式",
+      "desc": "ESP32、micro-ROS、传感器与电源。这是我的兴趣所在，所以写得最多——但它是兴趣，不是这个站的全部。",
+      "tags": ["esp32", "firmware", "ros2", "micro-ros", "hardware", "comm", "env", "android", "design"]
+    }
+  ]
 }

@@ -161,6 +161,17 @@ for (const p of items) {
   }
 }
 
+/* ---------- 三个方向（首页 pillar 板块） ----------
+   数据源是 posts.json 的顶层 pillars。每个方向挂一组标签：
+     · 篇数 = 标签命中任一即算（同一篇不会在一个方向里被数两次）
+     · 标签链接只给「真的有文章」的标签——像 backend / ai 这种先留着的标签
+       没文章时会被静默跳过，等第一篇文章打上它，链接会自动出现。 */
+const pillars = data.pillars || [];
+const pillarPosts = (pl) => {
+  const set = new Set(pl.tags || []);
+  return items.filter((p) => (p.tags || []).some((t) => set.has(t)));
+};
+
 /* ---------- 相关文章：按标签重合度打分，同分类加权 ---------- */
 const relatedFor = (p, n = 3) => {
   const mine = new Set(p.tags || []);
@@ -222,6 +233,8 @@ const injectChrome = (html, current) => {
     EMAIL: site.email,
     YEAR: new Date().getFullYear(),
     LATIN: site.latin,
+    NAME: site.name,
+    TAGLINE: site.tagline || '',
   }).replace(/\s+$/, ''));
   if (b) out = b;
   return out;
@@ -306,6 +319,26 @@ for (const p of items) {
   }).replace(/\s+$/, '');
   const withStats = fill(html, 'stats', stats);
   if (withStats) { html = withStats; touched = true; }
+
+  /* 三个方向：从 posts.json 的 pillars 渲染，篇数与标签链接都是算出来的 */
+  if (pillars.length) {
+    const cards = pillars.map((pl) => {
+      const list = pillarPosts(pl);
+      const chips = (pl.tags || [])
+        .filter((t) => tagIndex.has(t))
+        .map((t) => `<a class="tag" href="${tagUrl(t)}">${labelFor(t)}</a>`)
+        .join('');
+      return render(tpl('pillar.html'), {
+        LATIN: pl.latin || '',
+        TITLE: pl.title || '',
+        DESC: tidy(pl.desc || ''),
+        COUNT: String(list.length),
+        TAGS: chips,
+      }).replace(/\s+$/, '');
+    }).join('\n');
+    const withPillars = fill(html, 'pillars', render(tpl('pillars.html'), { CARDS: cards }).replace(/\s+$/, ''));
+    if (withPillars) { html = withPillars; touched = true; }
+  }
 
   const featureTpl = latest.cover ? 'feature.html' : 'feature-plain.html';
   const feature = render(tpl(featureTpl), {
@@ -483,7 +516,7 @@ for (const p of items) {
   <channel>
     <title>${site.name} ${site.latin}</title>
     <link>${site.url}/</link>
-    <description>一个嵌入式工程师的调试笔记：ESP32、micro-ROS、传感器与工作台。记录失败、数据，以及被推翻过的结论。</description>
+    <description>${site.taglineLong || `${site.tagline || ''}：记录失败、数据，以及被推翻过的结论。`}</description>
     <language>zh-CN</language>
     <managingEditor>${site.email} (${site.latin})</managingEditor>
     <lastBuildDate>${fmtRFC822(latest.date)}</lastBuildDate>
